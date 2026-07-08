@@ -1,0 +1,44 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+build/
+*.so
+*.dylib
+*.dll
+
+# Go
+bin/
+*.out
+*.test
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+.dockerignore
+
+# Media (generated, mounted at repo root by docker-compose.yaml -> /app/media)
+/media/
+!/media/.gitkeep
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temporary
+*.tmp
+.cache/

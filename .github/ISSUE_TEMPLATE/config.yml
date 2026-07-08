@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussion
+    url: https://github.com/HelioFernandes404/openflashcards/discussions
+    about: Ask questions or discuss ideas here rather than filing an issue.

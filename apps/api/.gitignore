@@ -1,0 +1,10 @@
+bin/
+*.test
+*.out
+coverage.txt
+.env
+.env.local
+vendor/
+
+# uploaded private media (never commit)
+/media/

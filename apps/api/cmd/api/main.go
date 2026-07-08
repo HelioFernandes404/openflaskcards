@@ -1,0 +1,245 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	texttospeech "cloud.google.com/go/texttospeech/apiv1"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/auth"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/cards"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/decks"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/kanban"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/letters"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/media"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/modules"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/notes"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/prompttemplates"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/cache"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/config"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/db"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/fsrs"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/fsrs/optimize"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/logger"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/middleware"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/tts"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/studyplans"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/users"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+)
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	log, err := logger.New(cfg.LogLevel, cfg.Env)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = log.Sync() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	redis, err := cache.NewRedis(ctx, cfg.RedisHost, cfg.RedisPort, cfg.RedisDB)
+	if err != nil {
+		log.Warn("redis unavailable, continuing without TTS cache", zap.Error(err))
+	}
+
+	ttsClient, err := newTTSClient(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	ttsSvc, err := tts.NewService(tts.Config{
+		Provider:     cfg.TTSProvider,
+		Redis:        redis,
+		CacheTTLSecs: cfg.TTSCacheTTLSeconds,
+		Google: tts.GoogleConfig{
+			Client:       ttsClient,
+			Language:     cfg.TTSLanguage,
+			VoiceName:    cfg.TTSVoiceName,
+			SpeakingRate: cfg.TTSSpeakingRate,
+		},
+		ElevenLabs: tts.ElevenLabsConfig{
+			APIKey:          cfg.ElevenLabsAPIKey,
+			VoiceID:         cfg.ElevenLabsVoiceID,
+			ModelID:         cfg.ElevenLabsModelID,
+			BaseURL:         cfg.ElevenLabsBaseURL,
+			Stability:       cfg.ElevenLabsStability,
+			SimilarityBoost: cfg.ElevenLabsSimilarityBoost,
+			Style:           cfg.ElevenLabsStyle,
+			UseSpeakerBoost: cfg.ElevenLabsUseSpeakerBoost,
+			Speed:           cfg.ElevenLabsSpeed,
+			OutputFormat:    cfg.ElevenLabsOutputFormat,
+		},
+		Piper: tts.PiperConfig{
+			BaseURL: cfg.PiperBaseURL,
+			Path:    cfg.PiperPath,
+			Token:   cfg.PiperToken,
+			Voice:   cfg.PiperVoice,
+			Model:   cfg.PiperModel,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	jwtMgr := auth.NewJWTManager([]byte(cfg.JWTSecret), time.Duration(cfg.AccessTokenTTLMinutes)*time.Minute)
+	scheduler := fsrs.New()
+
+	authRepo := auth.NewRepository(pool)
+	authSvc := auth.NewService(authRepo, jwtMgr, cfg.RefreshTokenTTLDays)
+	usersSvc := users.NewService(pool, users.WithOptimizerRunner(optimize.Runner{
+		Binary:  cfg.FSRSOptimizerBin,
+		Timeout: 120 * time.Second,
+	}))
+	if err := usersSvc.ReconcileStaleOptimizations(ctx); err != nil {
+		log.Warn("failed to reconcile stale FSRS optimizations on startup", zap.Error(err))
+	}
+	decksSvc := decks.NewService(pool)
+	modulesSvc := modules.NewService(pool)
+	notesSvc := notes.NewService(pool)
+	promptTemplatesSvc := prompttemplates.NewService(pool)
+	lettersSvc := letters.NewService(pool)
+	studyPlansSvc := studyplans.NewService(pool)
+	kanbanSvc := kanban.NewService(pool)
+	cardsSvc := cards.NewService(pool, scheduler, ttsSvc, cards.WithLogger(log))
+	mediaSvc := media.NewService(media.NewRepository(pool), cfg.MediaDir, cfg.MediaMaxImageBytes)
+
+	authH := auth.NewHandler(authSvc)
+	usersH := users.NewHandler(usersSvc, authSvc, jwtMgr)
+	decksH := decks.NewHandler(decksSvc, jwtMgr)
+	modulesH := modules.NewHandler(modulesSvc, jwtMgr)
+	notesH := notes.NewHandler(notesSvc, jwtMgr)
+	promptTemplatesH := prompttemplates.NewHandler(promptTemplatesSvc, jwtMgr)
+	lettersH := letters.NewHandler(lettersSvc, jwtMgr)
+	studyPlansH := studyplans.NewHandler(studyPlansSvc, jwtMgr)
+	kanbanH := kanban.NewHandler(kanbanSvc, jwtMgr)
+	cardsH := cards.NewHandler(cardsSvc, jwtMgr)
+	mediaH := media.NewHandler(mediaSvc, jwtMgr)
+
+	if cfg.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	r := gin.New()
+	r.Use(middleware.Recovery(log))
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.RequestID())
+	r.Use(middleware.InjectLogger(log))
+	r.Use(middleware.AccessLog(log))
+	r.Use(corsMiddleware(cfg.CORSAllowedOrigins))
+	r.GET("/health", middleware.HealthCheck(middleware.HealthDeps{
+		Pool:  pool,
+		Redis: redis,
+	}))
+
+	authRateLimiter := cache.NewRedisRateLimiter(redis)
+	authRateLimit := middleware.RateLimit(authRateLimiter, 20, time.Minute, middleware.ByClientIP)
+
+	api := r.Group("/api/v1")
+	authH.RegisterRoutes(api.Group("/auth"), authRateLimit)
+	usersH.RegisterRoutes(api.Group("/users"))
+	decksH.RegisterRoutes(api.Group("/decks"))
+	modulesH.RegisterRoutes(api.Group("/modules"))
+	notesH.RegisterRoutes(api.Group("/notes"))
+	promptTemplatesH.RegisterRoutes(api.Group("/prompt-templates"))
+	lettersH.RegisterRoutes(api.Group("/letters"))
+	studyPlansH.RegisterRoutes(api.Group("/study-plans"))
+	kanbanH.RegisterRoutes(api.Group("/kanban-cards"))
+	cardsH.RegisterCardRoutes(api.Group("/cards"))
+	cardsH.RegisterDeckCardRoutes(api.Group("/decks"))
+	mediaH.RegisterRoutes(api.Group("/media"))
+
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	go func() {
+		log.Info("api listening", zap.Int("port", cfg.Port))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("server", zap.Error(err))
+		}
+	}()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
+	log.Info("shutting down")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return err
+	}
+
+	// Drain in-flight FSRS optimizations before the deferred pool.Close(),
+	// so a deploy doesn't kill a job mid-write and strand the user's
+	// optimization_status in "running".
+	jobsCtx, jobsCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer jobsCancel()
+	if err := usersSvc.WaitForJobs(jobsCtx); err != nil {
+		log.Warn("optimization jobs did not finish before shutdown", zap.Error(err))
+	}
+	return nil
+}
+
+// corsMiddleware allows the configured frontend origins to call the API
+// directly (e.g. local dev where the web app is not proxied).
+func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		allowed[strings.TrimSpace(o)] = true
+	}
+	return func(c *gin.Context) {
+		origin := c.Request.Header.Get("Origin")
+		if allowed[origin] {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
+			c.Header("Access-Control-Expose-Headers", "X-Request-ID")
+		}
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
+
+func newTTSClient(ctx context.Context, cfg *config.Config) (*texttospeech.Client, error) {
+	if strings.TrimSpace(cfg.TTSProvider) != "" && strings.ToLower(strings.TrimSpace(cfg.TTSProvider)) != tts.ProviderGoogle {
+		return nil, nil
+	}
+	client, err := texttospeech.NewClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("google tts client init: %w", err)
+	}
+	return client, nil
+}
