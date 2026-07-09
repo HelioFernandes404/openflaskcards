@@ -152,6 +152,7 @@ func run() error {
 	r.GET("/health", middleware.HealthCheck(middleware.HealthDeps{
 		Pool:  pool,
 		Redis: redis,
+		TTS:   ttsSvc,
 	}))
 
 	authRateLimiter := cache.NewRedisRateLimiter(redis)

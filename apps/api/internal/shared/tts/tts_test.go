@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,8 @@ type fakeProvider struct {
 	cacheKey string
 	payload  string
 	calls    int
+	failN    int
+	failErr  error
 }
 
 func (f *fakeProvider) Name() string { return f.name }
@@ -25,6 +28,9 @@ func (f *fakeProvider) CacheKey() string { return f.cacheKey }
 
 func (f *fakeProvider) Synthesize(_ context.Context, _ string) (string, error) {
 	f.calls++
+	if f.calls <= f.failN {
+		return "", f.failErr
+	}
 	return f.payload, nil
 }
 
@@ -41,6 +47,49 @@ func TestServiceSynthesizeDelegatesToProvider(t *testing.T) {
 	}
 	if provider.calls != 1 {
 		t.Fatalf("provider calls = %d; want 1", provider.calls)
+	}
+}
+
+func TestServiceSynthesizeRetriesTransientFailure(t *testing.T) {
+	provider := &fakeProvider{
+		name: "fake", cacheKey: "fake|1", payload: "audio-payload",
+		failN:   1,
+		failErr: &upstreamError{statusCode: http.StatusServiceUnavailable, err: errors.New("upstream 503")},
+	}
+	svc := &Service{provider: provider, breaker: newCircuitBreaker(3, time.Minute)}
+
+	got, err := svc.Synthesize(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Synthesize failed: %v", err)
+	}
+	if got != "audio-payload" {
+		t.Fatalf("Synthesize() = %q; want %q", got, "audio-payload")
+	}
+	if provider.calls != 2 {
+		t.Fatalf("provider calls = %d; want 2 (1 failure + 1 retry)", provider.calls)
+	}
+}
+
+func TestServiceSynthesizeOpensCircuitAfterConsecutiveFailures(t *testing.T) {
+	failErr := &upstreamError{statusCode: http.StatusServiceUnavailable, err: errors.New("upstream 503")}
+	provider := &fakeProvider{name: "fake", cacheKey: "fake|1", failN: 100, failErr: failErr}
+	svc := &Service{provider: provider, breaker: newCircuitBreaker(2, time.Minute)}
+
+	for i := 0; i < 2; i++ {
+		if _, err := svc.Synthesize(context.Background(), "hello"); err == nil {
+			t.Fatalf("Synthesize() call %d: expected error", i)
+		}
+	}
+	if got := svc.Status(); got != "degraded" {
+		t.Fatalf("Status() = %q; want %q", got, "degraded")
+	}
+
+	callsBeforeOpenCheck := provider.calls
+	if _, err := svc.Synthesize(context.Background(), "hello"); !errors.Is(err, errCircuitOpen) {
+		t.Fatalf("Synthesize() error = %v; want circuit open error", err)
+	}
+	if provider.calls != callsBeforeOpenCheck {
+		t.Fatalf("provider called while circuit open: calls = %d; want %d", provider.calls, callsBeforeOpenCheck)
 	}
 }
 

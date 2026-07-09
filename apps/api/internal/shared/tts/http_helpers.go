@@ -45,8 +45,11 @@ func errorFromResponse(resp *http.Response) error {
 		return fmt.Errorf("tts: read error body: %w", err)
 	}
 	detail := strings.TrimSpace(string(body))
+	var underlying error
 	if detail == "" {
-		return fmt.Errorf("tts: upstream returned %s", resp.Status)
+		underlying = fmt.Errorf("tts: upstream returned %s", resp.Status)
+	} else {
+		underlying = fmt.Errorf("tts: upstream returned %s: %s", resp.Status, detail)
 	}
-	return fmt.Errorf("tts: upstream returned %s: %s", resp.Status, detail)
+	return &upstreamError{statusCode: resp.StatusCode, err: underlying}
 }

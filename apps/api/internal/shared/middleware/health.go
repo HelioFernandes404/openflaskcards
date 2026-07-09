@@ -10,9 +10,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// TTSStatusChecker reports the health of the active TTS provider without
+// making a network call (e.g. based on a circuit breaker's state).
+type TTSStatusChecker interface {
+	Status() string
+}
+
 type HealthDeps struct {
 	Pool  *pgxpool.Pool
 	Redis *redis.Client
+	TTS   TTSStatusChecker
 }
 
 func HealthCheck(deps HealthDeps) gin.HandlerFunc {
@@ -38,6 +45,16 @@ func HealthCheck(deps HealthDeps) gin.HandlerFunc {
 			}
 		} else {
 			checks["redis"] = "unavailable"
+		}
+
+		if deps.TTS != nil {
+			// Degraded TTS is signaled in the payload but does not flip the
+			// endpoint to unhealthy: audio generation failing is not as
+			// severe as losing the database/cache, and callers can decide
+			// how to react to a "degraded" tts check.
+			checks["tts"] = deps.TTS.Status()
+		} else {
+			checks["tts"] = "unavailable"
 		}
 
 		status := "ok"
