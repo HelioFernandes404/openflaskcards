@@ -117,7 +117,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID uuid.UUID) (StudyPlan,
 		return StudyPlan{}, err
 	}
 	if row.UserID != userID {
-		return StudyPlan{}, apperror.ErrForbidden
+		return StudyPlan{}, apperror.ErrStudyPlanNotFound
 	}
 	return mapStudyPlan(row)
 }

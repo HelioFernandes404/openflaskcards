@@ -85,7 +85,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID uuid.UUID) (Module, er
 		return Module{}, err
 	}
 	if row.UserID != userID {
-		return Module{}, apperror.ErrForbidden
+		return Module{}, apperror.ErrModuleNotFound
 	}
 	return mapModule(row), nil
 }

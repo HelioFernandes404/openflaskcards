@@ -61,7 +61,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID uuid.UUID) (PromptTemp
 		return PromptTemplate{}, err
 	}
 	if row.UserID != userID {
-		return PromptTemplate{}, apperror.ErrForbidden
+		return PromptTemplate{}, apperror.ErrPromptTemplateNotFound
 	}
 	return mapPromptTemplate(row), nil
 }
