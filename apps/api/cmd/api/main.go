@@ -143,6 +143,13 @@ func run() error {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
+	// Only headers set by an explicitly trusted reverse proxy may override
+	// the client IP; otherwise ClientIP() falls back to the real TCP peer.
+	// This keeps the auth rate limiter (keyed by ClientIP) from being
+	// bypassed by an attacker sending a different X-Forwarded-For per request.
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		return fmt.Errorf("set trusted proxies: %w", err)
+	}
 	r.Use(middleware.Recovery(log))
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.RequestID())

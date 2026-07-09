@@ -64,6 +64,12 @@ type Config struct {
 	// CORS
 	CORSAllowedOrigins []string `envconfig:"CORS_ALLOWED_ORIGINS" default:"http://localhost:5173"`
 
+	// TrustedProxies lists the IPs/CIDRs of reverse proxies allowed to set
+	// X-Forwarded-For/X-Real-IP. Empty (the default) means no proxy is
+	// trusted, so gin.Engine.ClientIP() always uses the real TCP peer
+	// address instead of a client-supplied header.
+	TrustedProxies []string `envconfig:"TRUSTED_PROXIES" default:""`
+
 	// FSRS optimizer sidecar (fsrs-rs)
 	FSRSOptimizerBin string `envconfig:"FSRS_OPTIMIZER_BIN" default:"/app/openflaskcards-fsrs-optimize"`
 }
