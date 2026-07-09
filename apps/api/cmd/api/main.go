@@ -174,6 +174,11 @@ func run() error {
 
 	authRateLimiter := cache.NewRedisRateLimiter(redis)
 	authRateLimit := middleware.RateLimit(authRateLimiter, 20, time.Minute, middleware.ByClientIP)
+	// TTS synthesis hits a paid provider on cache miss and the cache key is
+	// trivially bypassed by any whitespace/punctuation change in the input
+	// text, so it needs its own per-user quota independent of /auth's IP
+	// based limiter (see openflashcards issue for cogcs#37).
+	ttsSynthesizeRateLimit := middleware.RateLimit(authRateLimiter, 30, time.Hour, middleware.ByUserID)
 
 	api := r.Group("/api/v1")
 	authH.RegisterRoutes(api.Group("/auth"), authRateLimit)
@@ -185,7 +190,7 @@ func run() error {
 	lettersH.RegisterRoutes(api.Group("/letters"))
 	studyPlansH.RegisterRoutes(api.Group("/study-plans"))
 	kanbanH.RegisterRoutes(api.Group("/kanban-cards"))
-	cardsH.RegisterCardRoutes(api.Group("/cards"))
+	cardsH.RegisterCardRoutes(api.Group("/cards"), ttsSynthesizeRateLimit)
 	cardsH.RegisterDeckCardRoutes(api.Group("/decks"))
 	mediaH.RegisterRoutes(api.Group("/media"))
 

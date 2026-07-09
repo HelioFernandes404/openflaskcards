@@ -44,7 +44,11 @@ func newHandlerWithService(svc cardsServicer, jwt *auth.JWTManager) *Handler {
 	return &Handler{svc: svc, jwt: jwt}
 }
 
-func (h *Handler) RegisterCardRoutes(g *gin.RouterGroup) {
+// RegisterCardRoutes wires the card endpoints. synthesizeMiddleware (e.g. a
+// per-user rate limiter) is applied only to POST /audio, which triggers a
+// paid call to the TTS provider on cache miss and is otherwise unbounded per
+// user (see cogcs#37).
+func (h *Handler) RegisterCardRoutes(g *gin.RouterGroup, synthesizeMiddleware ...gin.HandlerFunc) {
 	g.Use(auth.Middleware(h.jwt))
 	g.POST("", h.create)
 	g.POST("/", h.create)
@@ -60,7 +64,7 @@ func (h *Handler) RegisterCardRoutes(g *gin.RouterGroup) {
 	g.GET("/:id/front", h.getFront)
 	g.GET("/:id/back", h.getBack)
 	g.GET("/:id/audio", h.audio)
-	g.POST("/audio", h.synthesizeText)
+	g.POST("/audio", append(synthesizeMiddleware, h.synthesizeText)...)
 	g.PUT("/:id", h.update)
 	g.PATCH("/:id/move", h.move)
 	g.DELETE("/:id", h.delete)

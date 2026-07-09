@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -18,6 +19,20 @@ type RateLimiter interface {
 
 // ByClientIP buckets requests by the caller's IP address.
 func ByClientIP(c *gin.Context) string {
+	return c.ClientIP()
+}
+
+// ByUserID buckets requests by the authenticated user's ID, falling back to
+// the client IP if no user is set on the context (e.g. route not behind auth
+// middleware). Used for quotas that must hold per-account regardless of how
+// many IPs a user requests from — e.g. paid third-party API calls.
+func ByUserID(c *gin.Context) string {
+	if uid, ok := c.Get("userID"); ok {
+		if s, ok := uid.(fmt.Stringer); ok {
+			return s.String()
+		}
+		return fmt.Sprintf("%v", uid)
+	}
 	return c.ClientIP()
 }
 
