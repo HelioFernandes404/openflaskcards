@@ -102,6 +102,15 @@ func (h *Handler) updateMe(c *gin.Context) {
 		auth.WriteError(c, err)
 		return
 	}
+	// Changing the password should end every other session: otherwise a
+	// stolen refresh token from a compromised device stays valid even after
+	// the owner changes their password to try to lock the attacker out.
+	if req.Password != nil && h.authSvc != nil {
+		if err := h.authSvc.LogoutAll(c.Request.Context(), uid); err != nil {
+			auth.WriteError(c, err)
+			return
+		}
+	}
 	c.JSON(http.StatusOK, toResp(u))
 }
 
