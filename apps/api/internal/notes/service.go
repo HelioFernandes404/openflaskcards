@@ -73,7 +73,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID uuid.UUID) (Note, erro
 		return Note{}, err
 	}
 	if row.UserID != userID {
-		return Note{}, apperror.ErrForbidden
+		return Note{}, apperror.ErrNoteNotFound
 	}
 	return mapNote(row), nil
 }

@@ -59,7 +59,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Card, error) {
 		return Card{}, err
 	}
 	if deck.UserID != in.UserID {
-		return Card{}, apperror.ErrForbidden
+		return Card{}, apperror.ErrDeckNotFound
 	}
 	newCard := s.fsrs.NewCard()
 	cardJSON, err := s.fsrs.MarshalCard(newCard)
@@ -100,7 +100,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID uuid.UUID) (Card, erro
 		return Card{}, apperror.ErrCardNotFound
 	}
 	if deck.UserID != userID {
-		return Card{}, apperror.ErrForbidden
+		return Card{}, apperror.ErrCardNotFound
 	}
 	return mapCard(row), nil
 }
@@ -111,7 +111,7 @@ func (s *Service) ListByDeck(ctx context.Context, deckID, userID uuid.UUID) ([]C
 		return nil, apperror.ErrDeckNotFound
 	}
 	if deck.UserID != userID {
-		return nil, apperror.ErrForbidden
+		return nil, apperror.ErrDeckNotFound
 	}
 	rows, err := s.q.ListCardsByDeck(ctx, deckID)
 	if err != nil {
@@ -130,7 +130,7 @@ func (s *Service) CountByDeck(ctx context.Context, deckID, userID uuid.UUID) (in
 		return 0, apperror.ErrDeckNotFound
 	}
 	if deck.UserID != userID {
-		return 0, apperror.ErrForbidden
+		return 0, apperror.ErrDeckNotFound
 	}
 	return s.q.CountCardsByDeck(ctx, deckID)
 }
@@ -200,7 +200,7 @@ func (s *Service) Move(ctx context.Context, id, newDeckID, userID uuid.UUID) (Ca
 	}
 	newDeck, err := s.q.GetDeckByID(ctx, newDeckID)
 	if err != nil || newDeck.UserID != userID {
-		return Card{}, apperror.ErrForbidden
+		return Card{}, apperror.ErrDeckNotFound
 	}
 	row, err := s.q.MoveCard(ctx, db.MoveCardParams{ID: id, DeckID: newDeckID})
 	if err != nil {

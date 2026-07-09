@@ -102,7 +102,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID uuid.UUID) (Letter, er
 		return Letter{}, err
 	}
 	if row.UserID != userID {
-		return Letter{}, apperror.ErrForbidden
+		return Letter{}, apperror.ErrLetterNotFound
 	}
 	return mapLetter(row), nil
 }
@@ -148,7 +148,7 @@ func (s *Service) validateDeckOwnership(ctx context.Context, deckID, userID uuid
 		return err
 	}
 	if row.UserID != userID {
-		return apperror.ErrForbidden
+		return apperror.ErrDeckNotFound
 	}
 	return nil
 }

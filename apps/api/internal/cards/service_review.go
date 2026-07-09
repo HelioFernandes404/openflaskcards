@@ -176,7 +176,7 @@ func (s *Service) DueSummaryByDeck(ctx context.Context, deckID, userID uuid.UUID
 		return DueSummary{}, apperror.ErrDeckNotFound
 	}
 	if deck.UserID != userID {
-		return DueSummary{}, apperror.ErrForbidden
+		return DueSummary{}, apperror.ErrDeckNotFound
 	}
 	if limit <= 0 {
 		limit = 200

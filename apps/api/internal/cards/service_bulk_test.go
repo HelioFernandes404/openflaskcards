@@ -66,8 +66,8 @@ func TestBulkCreateCardsRejectsForeignDeck(t *testing.T) {
 		DeckID: deckID, UserID: attacker,
 		Items: []BulkItemInput{{Front: "a", Back: "1"}},
 	})
-	if err != apperror.ErrForbidden {
-		t.Errorf("expected ErrForbidden, got %v", err)
+	if err != apperror.ErrDeckNotFound {
+		t.Errorf("expected ErrDeckNotFound, got %v", err)
 	}
 	if len(q.created) != 0 {
 		t.Errorf("expected no cards created for a deck owned by another user, got %d", len(q.created))

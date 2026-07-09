@@ -116,7 +116,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID uuid.UUID) (KanbanCard
 		return KanbanCard{}, err
 	}
 	if row.UserID != userID {
-		return KanbanCard{}, apperror.ErrForbidden
+		return KanbanCard{}, apperror.ErrKanbanCardNotFound
 	}
 	return mapKanbanCard(row), nil
 }

@@ -92,7 +92,7 @@ func (s *Service) GetByID(ctx context.Context, id, userID uuid.UUID) (Deck, erro
 		return Deck{}, err
 	}
 	if row.UserID != userID {
-		return Deck{}, apperror.ErrForbidden
+		return Deck{}, apperror.ErrDeckNotFound
 	}
 	return mapDeck(row), nil
 }
@@ -185,7 +185,7 @@ func (s *Service) validateModuleOwnership(ctx context.Context, moduleID, userID 
 		return err
 	}
 	if row.UserID != userID {
-		return apperror.ErrForbidden
+		return apperror.ErrModuleNotFound
 	}
 	return nil
 }

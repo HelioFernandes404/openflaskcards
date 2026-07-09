@@ -112,8 +112,8 @@ func TestCreateRejectsDeckOwnedByAnotherUser(t *testing.T) {
 	_, err := svc.Create(context.Background(), CreateInput{
 		UserID: attacker, Title: "T", Artist: "A", DeckID: &deckID,
 	})
-	if err != apperror.ErrForbidden {
-		t.Errorf("expected ErrForbidden when deckId belongs to another user, got %v", err)
+	if err != apperror.ErrDeckNotFound {
+		t.Errorf("expected ErrDeckNotFound when deckId belongs to another user, got %v", err)
 	}
 }
 
@@ -155,8 +155,8 @@ func TestUpdateRejectsDeckOwnedByAnotherUser(t *testing.T) {
 	_, err = svc.Update(context.Background(), letter.ID, attacker, UpdateInput{
 		DeckIDSet: true, DeckID: &otherDeckID,
 	})
-	if err != apperror.ErrForbidden {
-		t.Errorf("expected ErrForbidden when re-pointing letter to another user's deck, got %v", err)
+	if err != apperror.ErrDeckNotFound {
+		t.Errorf("expected ErrDeckNotFound when re-pointing letter to another user's deck, got %v", err)
 	}
 }
 

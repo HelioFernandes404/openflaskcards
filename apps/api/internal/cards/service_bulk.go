@@ -63,7 +63,7 @@ func bulkCreateCards(ctx context.Context, q bulkQuerier, scheduler *fsrs.Schedul
 		return BulkCreateOutput{}, err
 	}
 	if deck.UserID != in.UserID {
-		return BulkCreateOutput{}, apperror.ErrForbidden
+		return BulkCreateOutput{}, apperror.ErrDeckNotFound
 	}
 
 	errs := make([]BulkItemError, 0)
