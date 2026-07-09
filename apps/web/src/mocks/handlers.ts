@@ -43,6 +43,11 @@ export const handlers = [
   http.post('*/api/v1/auth/login', () => HttpResponse.json(mockTokens)),
   http.post('*/api/v1/auth/refresh', () => HttpResponse.json(mockTokens)),
   http.get('*/api/v1/auth/me', () => HttpResponse.json(mockUser)),
+  http.get('*/api/v1/users/me', () => HttpResponse.json(mockUser)),
+  http.patch('*/api/v1/users/me', async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>
+    return HttpResponse.json({ ...mockUser, ...body })
+  }),
   http.get('*/api/v1/prompt-templates', () =>
     HttpResponse.json([...mockPromptTemplates]),
   ),
