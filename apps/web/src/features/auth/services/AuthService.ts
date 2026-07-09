@@ -82,9 +82,8 @@ export class AuthService {
     if (this.refreshPromise) return this.refreshPromise
 
     this.refreshPromise = (async () => {
-      const { data } = await httpClient.post<RefreshTokenResponse>(
-        '/auth/refresh',
-      )
+      const { data } =
+        await httpClient.post<RefreshTokenResponse>('/auth/refresh')
       accessTokenStore.set(data.access_token, data.expires_in)
     })()
 
