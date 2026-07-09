@@ -3,12 +3,12 @@ package auth
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/apperror"
 	db "github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -148,9 +148,6 @@ func userFromRow(row db.User) User {
 const timeLayout = "2006-01-02T15:04:05Z07:00"
 
 func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "23505") || strings.Contains(msg, "duplicate key")
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
