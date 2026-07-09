@@ -14,9 +14,9 @@ vi.mock('@/features/auth/hooks/useAuth', () => ({
   useAuth: () => ({ user: { id: 'user-1' }, loading: false }),
 }))
 
-vi.mock('@/shared/services/sessionStorage', () => ({
-  sessionStorage: {
-    getAccessToken: () => 'test-token',
+vi.mock('@/shared/services/accessTokenStore', () => ({
+  accessTokenStore: {
+    get: () => 'test-token',
   },
 }))
 

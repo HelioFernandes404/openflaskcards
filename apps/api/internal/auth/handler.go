@@ -12,11 +12,49 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc            *Service
+	refreshTTLDays int
+	cookieSecure   bool
 }
 
+// refreshCookieName is the httpOnly cookie carrying the refresh token. It is
+// never included in a JSON response body or readable by client JS — see
+// setRefreshCookie/clearRefreshCookie.
+const refreshCookieName = "refresh_token"
+
+// refreshCookiePath scopes the cookie to the auth surface (login/register
+// set it, refresh/logout read and clear it) instead of sending it on every
+// API request.
+const refreshCookiePath = "/api/v1/auth"
+
+// NewHandler defaults refreshTTLDays to 30 and cookieSecure to true. Prefer
+// NewHandlerWithConfig in production wiring so the cookie's Max-Age tracks
+// the actual configured refresh token TTL.
 func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+	return &Handler{svc: svc, refreshTTLDays: 30, cookieSecure: true}
+}
+
+// NewHandlerWithConfig lets the caller pin the cookie's Max-Age (must match
+// REFRESH_TOKEN_EXPIRE_DAYS) and whether the Secure attribute is set. Secure
+// should only be disabled for local development over plain HTTP; production
+// must always pass true.
+func NewHandlerWithConfig(svc *Service, refreshTTLDays int, cookieSecure bool) *Handler {
+	return &Handler{svc: svc, refreshTTLDays: refreshTTLDays, cookieSecure: cookieSecure}
+}
+
+// setRefreshCookie sets the httpOnly, SameSite=Strict refresh token cookie.
+// gin's ctx.SetCookie has no SameSite parameter, so SetSameSite must be
+// called first — otherwise the attribute silently defaults away from Strict.
+func (h *Handler) setRefreshCookie(c *gin.Context, token string) {
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(refreshCookieName, token, h.refreshTTLDays*24*3600, refreshCookiePath, "", h.cookieSecure, true)
+}
+
+// clearRefreshCookie deletes the cookie. Path must match exactly what it was
+// set with, or the browser treats it as a distinct cookie and keeps the old one.
+func (h *Handler) clearRefreshCookie(c *gin.Context) {
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(refreshCookieName, "", -1, refreshCookiePath, "", h.cookieSecure, true)
 }
 
 // RegisterRoutes wires the auth endpoints. sensitiveMiddleware (e.g. a rate
@@ -54,9 +92,10 @@ func (h *Handler) register(c *gin.Context) {
 		WriteError(c, err)
 		return
 	}
+	h.setRefreshCookie(c, tok.RefreshToken)
 	c.JSON(http.StatusCreated, tokenResp{
-		AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken,
-		TokenType: "bearer", ExpiresIn: tok.ExpiresIn,
+		AccessToken: tok.AccessToken,
+		TokenType:   "bearer", ExpiresIn: tok.ExpiresIn,
 	})
 }
 
@@ -65,11 +104,13 @@ type loginReq struct {
 	Password string `json:"password" binding:"required,min=1"`
 }
 
+// tokenResp is the login/register/refresh response body. The refresh token
+// never appears here — it is set as an httpOnly cookie instead (see
+// setRefreshCookie), so it can't be read or exfiltrated by client-side JS.
 type tokenResp struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
 }
 
 func (h *Handler) login(c *gin.Context) {
@@ -83,30 +124,39 @@ func (h *Handler) login(c *gin.Context) {
 		WriteError(c, err)
 		return
 	}
+	h.setRefreshCookie(c, tok.RefreshToken)
 	c.JSON(http.StatusOK, tokenResp{
-		AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken,
-		TokenType: "bearer", ExpiresIn: tok.ExpiresIn,
+		AccessToken: tok.AccessToken,
+		TokenType:   "bearer", ExpiresIn: tok.ExpiresIn,
 	})
 }
 
-type refreshReq struct {
-	RefreshToken string `json:"refresh_token" binding:"required,min=1"`
+// refreshTokenFromRequest reads the refresh token from the httpOnly cookie.
+// The client never sends it in the body anymore — the cookie is attached
+// automatically by the browser (credentials: 'include' on the frontend).
+func refreshTokenFromRequest(c *gin.Context) string {
+	token, _ := c.Cookie(refreshCookieName)
+	return token
 }
 
 func (h *Handler) refresh(c *gin.Context) {
-	var req refreshReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		WriteError(c, apperror.New("VALIDATION_ERROR", http.StatusUnprocessableEntity, err.Error()))
+	refreshToken := refreshTokenFromRequest(c)
+	if refreshToken == "" {
+		// 401, not 422: a missing cookie means "not authenticated", the
+		// same signal the frontend already treats as a definitive refresh
+		// failure (see isDefinitiveRefreshFailure in apiClientAuth.ts).
+		WriteError(c, apperror.ErrInvalidToken)
 		return
 	}
-	tok, err := h.svc.Refresh(c.Request.Context(), req.RefreshToken)
+	tok, err := h.svc.Refresh(c.Request.Context(), refreshToken)
 	if err != nil {
 		WriteError(c, err)
 		return
 	}
+	h.setRefreshCookie(c, tok.RefreshToken)
 	c.JSON(http.StatusOK, tokenResp{
-		AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken,
-		TokenType: "bearer", ExpiresIn: tok.ExpiresIn,
+		AccessToken: tok.AccessToken,
+		TokenType:   "bearer", ExpiresIn: tok.ExpiresIn,
 	})
 }
 
@@ -150,17 +200,13 @@ func (h *Handler) resetPassword(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-type logoutReq struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
 func (h *Handler) logout(c *gin.Context) {
-	var req logoutReq
-	_ = c.ShouldBindJSON(&req)
-	if err := h.svc.Logout(c.Request.Context(), req.RefreshToken); err != nil {
+	refreshToken := refreshTokenFromRequest(c)
+	if err := h.svc.Logout(c.Request.Context(), refreshToken); err != nil {
 		WriteError(c, err)
 		return
 	}
+	h.clearRefreshCookie(c)
 	c.Status(http.StatusNoContent)
 }
 
@@ -170,6 +216,9 @@ func (h *Handler) logoutAll(c *gin.Context) {
 		WriteError(c, err)
 		return
 	}
+	// logout-all revokes every refresh token for the user, including the
+	// one this browser is holding — its cookie must go too.
+	h.clearRefreshCookie(c)
 	c.Status(http.StatusNoContent)
 }
 

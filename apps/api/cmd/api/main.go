@@ -145,7 +145,10 @@ func run() error {
 	mediaSvc := media.NewService(media.NewRepository(pool), cfg.MediaDir, cfg.MediaMaxImageBytes)
 	cardsSvc := cards.NewService(pool, scheduler, ttsSvc, cards.WithLogger(log), cards.WithMediaOwnerChecker(mediaSvc))
 
-	authH := auth.NewHandler(authSvc)
+	// Cookie Secure is disabled only in local development (plain HTTP);
+	// production must always send Secure so the refresh cookie is never
+	// transmitted unencrypted.
+	authH := auth.NewHandlerWithConfig(authSvc, cfg.RefreshTokenTTLDays, cfg.Env != "development")
 	usersH := users.NewHandler(usersSvc, authSvc, jwtMgr)
 	decksH := decks.NewHandler(decksSvc, jwtMgr)
 	modulesH := modules.NewHandler(modulesSvc, jwtMgr)

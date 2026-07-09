@@ -18,6 +18,7 @@ import {
   parseResponse,
 } from './apiClientRequest'
 import { executeRequest } from './apiClientTransport'
+import { accessTokenStore } from './accessTokenStore'
 import { sessionStorage } from './sessionStorage'
 
 let refreshPromise: Promise<void> | null = null
@@ -27,6 +28,7 @@ function redirectToLogin(): void {
 }
 
 function handleRefreshFailure(error: unknown): never {
+  accessTokenStore.clear()
   sessionStorage.clearSession()
   redirectToLogin()
   throw error instanceof ApiError ? error : parseApiError(error)
@@ -37,11 +39,13 @@ function isDefinitiveRefreshFailure(error: unknown): boolean {
   return error instanceof ApiError && error.statusCode === 401
 }
 
+// Refreshes the access token using the httpOnly refresh token cookie —
+// the browser attaches it automatically (see credentials: 'include' in
+// buildRequestInit), so no refresh token ever needs to be read or sent by
+// client JS. A missing/expired/revoked cookie surfaces as a 401 from the
+// server, which handleRefreshFailure treats as "not authenticated".
 export async function refreshAccessToken(): Promise<void> {
   if (refreshPromise) return refreshPromise
-  const refreshToken = sessionStorage.getRefreshToken()
-  if (!refreshToken)
-    handleRefreshFailure(new HttpClientError('Missing refresh token', 401))
 
   refreshPromise = (async () => {
     const requestId = generateRequestId()
@@ -49,16 +53,12 @@ export async function refreshAccessToken(): Promise<void> {
       '/auth/refresh',
       'POST',
       {
-        body: { refresh_token: refreshToken },
         skipAuth: true,
       },
       requestId,
     )
     const logContext = createApiLogContext('POST', request.url, requestId)
-    logApiRequest(logContext, {
-      body: { refresh_token: refreshToken },
-      headers: request.init.headers,
-    })
+    logApiRequest(logContext, { headers: request.init.headers })
     try {
       const response = await executeRequest(request, true, true)
       if (!response.ok) {
@@ -73,9 +73,7 @@ export async function refreshAccessToken(): Promise<void> {
       }
       const data = await parseResponse<RefreshTokenResponse>(response)
       logApiResponse(logContext, response, data)
-      sessionStorage.setAccessToken(data.access_token)
-      sessionStorage.setRefreshToken(data.refresh_token)
-      sessionStorage.setTokenExpiry(Date.now() + data.expires_in * 1000)
+      accessTokenStore.set(data.access_token, data.expires_in)
     } catch (error) {
       logApiError(logContext, error)
       throw error
@@ -95,10 +93,15 @@ export async function refreshAccessToken(): Promise<void> {
 export async function ensureValidAccessToken(
   signal?: NullableAbortSignal,
 ): Promise<void> {
-  if (!sessionStorage.getRefreshToken()) return
+  // Nothing to refresh yet: this app instance never established a session
+  // (e.g. a call fired before AuthProvider's mount-time silent refresh
+  // resolved, or a genuinely anonymous page). Let the request go out
+  // without a token rather than spend a round trip on a refresh call that
+  // has no cookie to succeed with.
+  if (!accessTokenStore.hasEverHadSession()) return
   if (
-    !sessionStorage.getAccessToken() ||
-    sessionStorage.isTokenExpired(ACCESS_TOKEN_REFRESH_BUFFER_MS)
+    !accessTokenStore.get() ||
+    accessTokenStore.isExpired(ACCESS_TOKEN_REFRESH_BUFFER_MS)
   ) {
     await waitForPromiseOrAbort(refreshAccessToken(), signal)
   }

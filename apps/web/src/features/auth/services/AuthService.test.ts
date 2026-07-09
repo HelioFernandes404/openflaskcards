@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { server } from '@/mocks/server'
+import { accessTokenStore } from '@/shared/services/accessTokenStore'
 import { sessionStorage } from '@/shared/services/sessionStorage'
 import { AuthService } from './AuthService'
 
@@ -30,25 +31,26 @@ describe('AuthService', () => {
     vi.stubGlobal('localStorage', createStorageStub())
     authService = new AuthService()
     sessionStorage.clearSession()
+    accessTokenStore.clear()
   })
 
   afterEach(() => {
     sessionStorage.clearSession()
+    accessTokenStore.clear()
     vi.unstubAllGlobals()
   })
 
-  it('login persists the token pair and returns the authenticated user', async () => {
+  it('login stores the access token in memory and returns the authenticated user', async () => {
     const user = await authService.login({
       email: 'user@example.com',
       password: 'supersecretpass',
     })
 
     expect(user.email).toBe('user@example.com')
-    expect(sessionStorage.getAccessToken()).toBe('mock-access-token')
-    expect(sessionStorage.getRefreshToken()).toBe('mock-refresh-token')
+    expect(accessTokenStore.get()).toBe('mock-access-token')
   })
 
-  it('register persists the token pair and returns the authenticated user', async () => {
+  it('register stores the access token in memory and returns the authenticated user', async () => {
     const user = await authService.register({
       email: 'new@example.com',
       password: 'supersecretpass',
@@ -56,8 +58,7 @@ describe('AuthService', () => {
     })
 
     expect(user.email).toBe('user@example.com')
-    expect(sessionStorage.getAccessToken()).toBe('mock-access-token')
-    expect(sessionStorage.getRefreshToken()).toBe('mock-refresh-token')
+    expect(accessTokenStore.get()).toBe('mock-access-token')
   })
 
   it('login propagates the error and does not persist a session on invalid credentials', async () => {
@@ -73,20 +74,15 @@ describe('AuthService', () => {
     await expect(
       authService.login({ email: 'bad@example.com', password: 'wrong' }),
     ).rejects.toBeTruthy()
-    expect(sessionStorage.getAccessToken()).toBeNull()
+    expect(accessTokenStore.get()).toBeNull()
   })
 
-  it('refreshToken persists the rotated access and refresh tokens', async () => {
-    sessionStorage.setSession({
-      accessToken: 'old-access',
-      refreshToken: 'old-refresh',
-      expiresIn: 900,
-    })
+  it('refreshToken stores the rotated access token; refresh token stays server-side (cookie)', async () => {
+    accessTokenStore.set('old-access', 900)
     server.use(
       http.post('*/api/v1/auth/refresh', () =>
         HttpResponse.json({
           access_token: 'rotated-access',
-          refresh_token: 'rotated-refresh',
           token_type: 'bearer',
           expires_in: 900,
         }),
@@ -95,22 +91,25 @@ describe('AuthService', () => {
 
     await authService.refreshToken()
 
-    expect(sessionStorage.getAccessToken()).toBe('rotated-access')
-    expect(sessionStorage.getRefreshToken()).toBe('rotated-refresh')
+    expect(accessTokenStore.get()).toBe('rotated-access')
   })
 
-  it('refreshToken throws without calling the API when there is no refresh token', async () => {
-    await expect(authService.refreshToken()).rejects.toThrow(
-      'No refresh token available',
+  it('refreshToken rejects when the server reports no valid refresh cookie', async () => {
+    server.use(
+      http.post('*/api/v1/auth/refresh', () =>
+        HttpResponse.json(
+          { code: 'INVALID_TOKEN', message: 'invalid token' },
+          { status: 401 },
+        ),
+      ),
     )
+
+    await expect(authService.refreshToken()).rejects.toBeTruthy()
+    expect(accessTokenStore.get()).toBeNull()
   })
 
-  it('logout clears the session even when the API call fails', async () => {
-    sessionStorage.setSession({
-      accessToken: 'access',
-      refreshToken: 'refresh',
-      expiresIn: 900,
-    })
+  it('logout clears the in-memory access token even when the API call fails', async () => {
+    accessTokenStore.set('access', 900)
     server.use(
       http.post('*/api/v1/auth/logout', () =>
         HttpResponse.json({ code: 'INTERNAL_ERROR' }, { status: 500 }),
@@ -119,8 +118,7 @@ describe('AuthService', () => {
 
     await authService.logout()
 
-    expect(sessionStorage.getAccessToken()).toBeNull()
-    expect(sessionStorage.getRefreshToken()).toBeNull()
+    expect(accessTokenStore.get()).toBeNull()
   })
 
   it('getCurrentUser stores the fetched user in the session', async () => {

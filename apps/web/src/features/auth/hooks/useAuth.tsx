@@ -24,20 +24,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     const validateSession = async () => {
-      const session = authService.getSession()
-
-      // If no tokens, not authenticated
-      if (!session.accessToken || !session.refreshToken) {
-        setLoading(false)
-        return
-      }
-
+      // The access token lives only in memory, so it's always gone after a
+      // full page reload. The only way to know if the user still has a
+      // session is to attempt a silent refresh — the httpOnly refresh
+      // token cookie (if any) is sent automatically by the browser. A
+      // failure here (no cookie, expired, revoked) just means "not
+      // authenticated", not an error to surface.
       try {
-        // Validate token by calling API
+        await authService.refreshToken()
         const user = await authService.getCurrentUser()
         setUser(user)
       } catch (error) {
-        // Invalid or expired token
         console.error('Session validation failed', error)
         authService.clearSession()
         setUser(null)

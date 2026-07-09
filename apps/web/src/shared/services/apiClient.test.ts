@@ -50,6 +50,45 @@ async function loadHttpClient() {
   return loadHttpClientWithBaseURL('http://localhost:3030/api/v1', 10000, false)
 }
 
+// Access token is in-memory now (see accessTokenStore.ts), not localStorage
+// — priming it for a test means importing accessTokenStore in the exact
+// same module-registry epoch apiClient's dependency graph was created in
+// (between the two vi.resetModules() calls), so both reference the same
+// singleton. expiresInSeconds may be negative to simulate an
+// already-expired token.
+async function loadHttpClientWithSession(
+  primeAccessToken: { token: string; expiresInSeconds: number } | null,
+  baseURL = 'http://localhost:3030/api/v1',
+  timeout = 10000,
+) {
+  vi.doMock('@/shared/config/api', () => ({
+    apiConfig: {
+      baseURL,
+      timeout,
+      retryAttempts: 3,
+      retryDelay: 1,
+      enableLogging: false,
+    },
+  }))
+
+  vi.resetModules()
+
+  try {
+    const { httpClient } = await import('./apiClient')
+    const { accessTokenStore } = await import('./accessTokenStore')
+    if (primeAccessToken) {
+      accessTokenStore.set(
+        primeAccessToken.token,
+        primeAccessToken.expiresInSeconds,
+      )
+    }
+    return { httpClient, accessTokenStore }
+  } finally {
+    vi.doUnmock('@/shared/config/api')
+    vi.resetModules()
+  }
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
   let reject!: (reason?: unknown) => void
@@ -569,7 +608,6 @@ describe('httpClient contract', () => {
     '/auth/register',
     '/auth/refresh',
   ])('does not automatically attach Authorization to %s', async (path) => {
-    localStorage.setItem('accessToken', 'token-antigo')
     const recorder = createRecorder()
     server.use(
       http.post(`*${path}`, async ({ request }) => {
@@ -578,17 +616,16 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: 3600,
+    })
     await httpClient.post(path, { ok: true })
 
     expect(recorder.calls[0]?.headers.get('authorization')).toBeNull()
   })
 
   it('automatically refreshes when token expires before request', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', '1')
-
     server.use(
       http.post('*/auth/refresh', ({ request }) => {
         expect(request.headers.get('authorization')).toBeNull()
@@ -604,23 +641,25 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient, accessTokenStore } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: -1,
+    })
     const response = await httpClient.get<{ ok: boolean }>('/secure')
 
     expect(response.data).toEqual({ ok: true })
-    expect(localStorage.getItem('accessToken')).toBe('token-novo')
+    expect(accessTokenStore.get()).toBe('token-novo')
   })
 
-  it('persists rotated refresh_token returned by /auth/refresh', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token-antigo')
-    localStorage.setItem('tokenExpiry', '1')
-
+  it('ignores any refresh_token field in the /auth/refresh response body', async () => {
+    // Rotation happens entirely server-side via the httpOnly cookie now —
+    // even if a response body carried a refresh_token, the client must
+    // never read or persist it (see issue #44).
     server.use(
       http.post('*/auth/refresh', () =>
         HttpResponse.json({
           access_token: 'token-novo',
-          refresh_token: 'refresh-token-novo',
+          refresh_token: 'unexpected-refresh-token',
           token_type: 'bearer',
           expires_in: 60,
         }),
@@ -628,19 +667,17 @@ describe('httpClient contract', () => {
       http.get('*/secure', () => HttpResponse.json({ ok: true })),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient, accessTokenStore } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: -1,
+    })
     await httpClient.get<{ ok: boolean }>('/secure')
 
-    // The API deletes the old refresh token when rotating; if the client doesn't
-    // persist the new one, the next refresh always fails with 401 and forces logout.
-    expect(localStorage.getItem('refreshToken')).toBe('refresh-token-novo')
+    expect(accessTokenStore.get()).toBe('token-novo')
+    expect(localStorage.getItem('refreshToken')).toBeNull()
   })
 
   it('does pre-request refresh when token expires within 60s buffer', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', String(Date.now() + 30_000))
-
     let refreshCalls = 0
     server.use(
       http.post('*/auth/refresh', () => {
@@ -657,19 +694,18 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient, accessTokenStore } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: 30,
+    })
     const response = await httpClient.get<{ ok: boolean }>('/secure')
 
     expect(response.data).toEqual({ ok: true })
     expect(refreshCalls).toBe(1)
-    expect(localStorage.getItem('accessToken')).toBe('token-buffer')
+    expect(accessTokenStore.get()).toBe('token-buffer')
   })
 
   it('retries refresh when /auth/refresh fails transiently', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', '1')
-
     let refreshAttempt = 0
     const urls: string[] = []
     server.use(
@@ -689,7 +725,10 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClientWithBaseURL('/api/v1')
+    const { httpClient, accessTokenStore } = await loadHttpClientWithSession(
+      { token: 'token-antigo', expiresInSeconds: -1 },
+      '/api/v1',
+    )
     const response = await httpClient.get<{ ok: boolean }>('/secure')
 
     expect(response.data).toEqual({ ok: true })
@@ -698,14 +737,10 @@ describe('httpClient contract', () => {
       '/api/v1/auth/refresh',
       '/api/v1/secure',
     ])
-    expect(localStorage.getItem('accessToken')).toBe('token-recuperado')
+    expect(accessTokenStore.get()).toBe('token-recuperado')
   })
 
   it('retries original request once after 401 and successful refresh', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', String(Date.now() + 120_000))
-
     const secureAuthHeaders: Array<string | null> = []
     server.use(
       http.get('*/secure', ({ request }) => {
@@ -725,7 +760,10 @@ describe('httpClient contract', () => {
       ),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: 3600,
+    })
     const response = await httpClient.get<{ ok: boolean }>('/secure')
 
     expect(response.data).toEqual({ ok: true })
@@ -736,10 +774,6 @@ describe('httpClient contract', () => {
   })
 
   it('shares a single refresh queue among concurrent requests', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', '1')
-
     const refreshDeferred = createDeferred<Response>()
     let refreshCalls = 0
     const secureCalls: string[] = []
@@ -759,7 +793,10 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: -1,
+    })
     const requestA = httpClient.get('/secure-1')
     const requestB = httpClient.get('/secure-2')
 
@@ -781,10 +818,6 @@ describe('httpClient contract', () => {
   })
 
   it('shares single refresh and single replay in 401 path for concurrent requests', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', String(Date.now() + 120_000))
-
     const refreshDeferred = createDeferred<Response>()
     let refreshCalls = 0
     const oldTokenCalls: string[] = []
@@ -811,7 +844,10 @@ describe('httpClient contract', () => {
       http.get('*/secure-2', secureHandler(2)),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: 120,
+    })
     const requestA = httpClient.get('/secure-1')
     const requestB = httpClient.get('/secure-2')
 
@@ -834,10 +870,6 @@ describe('httpClient contract', () => {
   })
 
   it('clears session and redirects to /login when refresh fails', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', '1')
-
     server.use(
       http.post('*/auth/refresh', () =>
         HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
@@ -847,23 +879,21 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient, accessTokenStore } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: -1,
+    })
 
     await expect(httpClient.get('/secure')).rejects.toMatchObject({
       name: 'AuthenticationError',
       statusCode: 401,
     })
 
-    expect(localStorage.getItem('accessToken')).toBeNull()
-    expect(localStorage.getItem('refreshToken')).toBeNull()
+    expect(accessTokenStore.get()).toBeNull()
     expect(globalThis.location.assign).toHaveBeenCalledWith('/login')
   })
 
   it('preserves session and does not redirect when refresh fails transiently', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', '1')
-
     server.use(
       http.post('*/auth/refresh', () => HttpResponse.error()),
       http.get('*/secure', () => {
@@ -871,14 +901,18 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient, accessTokenStore } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: -1,
+    })
 
     await expect(httpClient.get('/secure')).rejects.toMatchObject({
       name: 'NetworkError',
     })
 
-    expect(localStorage.getItem('accessToken')).toBe('token-antigo')
-    expect(localStorage.getItem('refreshToken')).toBe('refresh-token')
+    // A transient (network) refresh failure must not clear the token that
+    // was there before the attempt — only a definitive 401 does that.
+    expect(accessTokenStore.get()).toBe('token-antigo')
     expect(globalThis.location.assign).not.toHaveBeenCalled()
   })
 
@@ -1040,10 +1074,6 @@ describe('httpClient contract', () => {
   })
 
   it('respects external AbortSignal while waiting for shared refresh', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', '1')
-
     const refreshDeferred = createDeferred<Response>()
     let secureCalls = 0
 
@@ -1055,7 +1085,10 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: -1,
+    })
     const controller = new AbortController()
     const abortedRequest = httpClient.get('/secure', {
       signal: controller.signal,
@@ -1078,10 +1111,6 @@ describe('httpClient contract', () => {
   })
 
   it('aborts only one waiter without dropping another request in same shared refresh', async () => {
-    localStorage.setItem('accessToken', 'token-antigo')
-    localStorage.setItem('refreshToken', 'refresh-token')
-    localStorage.setItem('tokenExpiry', '1')
-
     const refreshDeferred = createDeferred<Response>()
     let refreshCalls = 0
     const secureOneCalls: number[] = []
@@ -1102,7 +1131,10 @@ describe('httpClient contract', () => {
       }),
     )
 
-    const httpClient = await loadHttpClient()
+    const { httpClient } = await loadHttpClientWithSession({
+      token: 'token-antigo',
+      expiresInSeconds: -1,
+    })
     const controller = new AbortController()
     const abortedRequest = httpClient.get('/secure-1', {
       signal: controller.signal,

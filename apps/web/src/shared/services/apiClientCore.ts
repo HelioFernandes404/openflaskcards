@@ -20,7 +20,7 @@ import {
 } from './apiClientRequest'
 import { executeRequest } from './apiClientTransport'
 import type { HttpMethod, HttpResponse } from './httpTypes'
-import { sessionStorage } from './sessionStorage'
+import { accessTokenStore } from './accessTokenStore'
 
 function resolveRequestId(headers?: HeadersInit): string {
   if (!headers) return generateRequestId()
@@ -72,7 +72,7 @@ export async function performRequest<T>(
         response.status === 401 &&
         shouldHandleAuth &&
         !hasRetried &&
-        sessionStorage.getRefreshToken()
+        accessTokenStore.hasEverHadSession()
       ) {
         await waitForPromiseOrAbort(
           refreshAccessToken(),

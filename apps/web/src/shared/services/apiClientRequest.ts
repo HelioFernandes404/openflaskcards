@@ -6,7 +6,7 @@ import {
   type NullableAbortSignal,
   type PreparedRequest,
 } from './apiClientConstants'
-import { sessionStorage } from './sessionStorage'
+import { accessTokenStore } from './accessTokenStore'
 
 function joinUrl(baseURL: string, path: string): string {
   if (/^https?:\/\//i.test(path)) return path
@@ -103,7 +103,7 @@ export function buildRequestInit(
   if (!existingRequestId && requestId)
     requestHeaders.set('X-Request-ID', requestId)
   if (!skipAuth && !isAuthRouteWithoutToken(url)) {
-    const token = sessionStorage.getAccessToken()
+    const token = accessTokenStore.get()
     if (token) requestHeaders.set('Authorization', `Bearer ${token}`)
   }
   return {
@@ -112,6 +112,10 @@ export function buildRequestInit(
       ...requestInit,
       method,
       headers: requestHeaders,
+      // Required so the browser attaches (and the server can set) the
+      // httpOnly refresh token cookie on login/refresh/logout. Harmless on
+      // other requests — Authorization already covers the access token.
+      credentials: 'include',
       ...(preparedBody.body !== undefined ? { body: preparedBody.body } : {}),
     },
   }

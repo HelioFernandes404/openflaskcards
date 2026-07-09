@@ -1,8 +1,9 @@
 import { HttpResponse, http } from 'msw'
 
+// No refresh_token here — the real server sets it as an httpOnly cookie,
+// never in the JSON body (see apps/api/internal/auth/handler.go).
 const mockTokens = {
   access_token: 'mock-access-token',
-  refresh_token: 'mock-refresh-token',
   token_type: 'bearer',
   expires_in: 900,
 }

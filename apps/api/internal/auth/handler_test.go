@@ -22,6 +22,26 @@ func setupTestRouter() *gin.Engine {
 	return r
 }
 
+// refreshCookieValue extracts the refresh token cookie value from a
+// response, asserting its security attributes (httpOnly, Secure,
+// SameSite=Strict) along the way. Returns "" if the cookie isn't present.
+func refreshCookieValue(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	for _, c := range resp.Cookies() {
+		if c.Name != refreshCookieName {
+			continue
+		}
+		if !c.HttpOnly {
+			t.Error("refresh cookie must be httpOnly")
+		}
+		if c.SameSite != http.SameSiteStrictMode {
+			t.Error("refresh cookie must be SameSite=Strict")
+		}
+		return c.Value
+	}
+	return ""
+}
+
 func TestRegisterEndpoint(t *testing.T) {
 	r := setupTestRouter()
 	body, _ := json.Marshal(map[string]string{
@@ -53,13 +73,24 @@ func TestRegisterEndpointReturnsTokens(t *testing.T) {
 	if v, _ := resp["access_token"].(string); v == "" {
 		t.Errorf("missing/empty access_token in register response, got body=%s", w.Body.String())
 	}
-	if v, _ := resp["refresh_token"].(string); v == "" {
-		t.Errorf("missing/empty refresh_token in register response, got body=%s", w.Body.String())
+	if _, ok := resp["refresh_token"]; ok {
+		t.Errorf("refresh_token must not appear in the JSON body, got body=%s", w.Body.String())
+	}
+	if refreshCookieValue(t, w.Result()) == "" {
+		t.Error("expected refresh token to be set as an httpOnly cookie")
 	}
 }
 
-// loginAs registers and logs in a user, returning the parsed token response.
+// loginAs registers and logs in a user, returning the parsed token response
+// body along with the raw *http.Response (for callers that need to send the
+// refresh cookie forward — see cookieFromLogin).
 func loginAs(t *testing.T, r *gin.Engine, email, password string) map[string]any {
+	t.Helper()
+	_, resp := loginAsFull(t, r, email, password)
+	return resp
+}
+
+func loginAsFull(t *testing.T, r *gin.Engine, email, password string) (*http.Response, map[string]any) {
 	t.Helper()
 	regBody, _ := json.Marshal(map[string]string{"email": email, "nickname": "ux", "password": password})
 	req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewReader(regBody))
@@ -76,17 +107,20 @@ func loginAs(t *testing.T, r *gin.Engine, email, password string) map[string]any
 	}
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	return resp
+	return w.Result(), resp
 }
 
 func TestLoginEndpoint(t *testing.T) {
 	r := setupTestRouter()
-	resp := loginAs(t, r, "u@x.com", "supersecretpass")
+	httpResp, resp := loginAsFull(t, r, "u@x.com", "supersecretpass")
 	if _, ok := resp["access_token"]; !ok {
 		t.Error("missing access_token in response")
 	}
-	if _, ok := resp["refresh_token"]; !ok {
-		t.Error("missing refresh_token in response")
+	if _, ok := resp["refresh_token"]; ok {
+		t.Error("refresh_token must not appear in the JSON body")
+	}
+	if refreshCookieValue(t, httpResp) == "" {
+		t.Error("expected refresh token to be set as an httpOnly cookie")
 	}
 }
 
@@ -115,11 +149,14 @@ func TestRegisterEndpointInvalidBody(t *testing.T) {
 
 func TestRefreshEndpoint(t *testing.T) {
 	r := setupTestRouter()
-	tok := loginAs(t, r, "u@x.com", "supersecretpass")
+	httpResp, _ := loginAsFull(t, r, "u@x.com", "supersecretpass")
+	refreshToken := refreshCookieValue(t, httpResp)
+	if refreshToken == "" {
+		t.Fatal("expected refresh cookie from login")
+	}
 
-	body, _ := json.Marshal(map[string]string{"refresh_token": tok["refresh_token"].(string)})
-	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: refreshCookieName, Value: refreshToken})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -130,16 +167,21 @@ func TestRefreshEndpoint(t *testing.T) {
 	if _, ok := resp["access_token"]; !ok {
 		t.Error("missing access_token after refresh")
 	}
+	if _, ok := resp["refresh_token"]; ok {
+		t.Error("refresh_token must not appear in the JSON body")
+	}
+	if refreshCookieValue(t, w.Result()) == "" {
+		t.Error("expected rotated refresh token to be set as an httpOnly cookie")
+	}
 }
 
-func TestRefreshEndpointMissingBody(t *testing.T) {
+func TestRefreshEndpointMissingCookie(t *testing.T) {
 	r := setupTestRouter()
-	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", bytes.NewReader([]byte("{}")))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status: got %d, want 422", w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want 401", w.Code)
 	}
 }
 
@@ -191,6 +233,43 @@ func TestMeEndpointUnauthorized(t *testing.T) {
 	}
 }
 
+func TestLogoutClearsRefreshCookie(t *testing.T) {
+	r := setupTestRouter()
+	httpResp, _ := loginAsFull(t, r, "u@x.com", "supersecretpass")
+	refreshToken := refreshCookieValue(t, httpResp)
+
+	req := httptest.NewRequest("POST", "/api/v1/auth/logout", nil)
+	req.AddCookie(&http.Cookie{Name: refreshCookieName, Value: refreshToken})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status: got %d, want 204, body=%s", w.Code, w.Body.String())
+	}
+
+	found := false
+	for _, c := range w.Result().Cookies() {
+		if c.Name != refreshCookieName {
+			continue
+		}
+		found = true
+		if c.MaxAge >= 0 {
+			t.Errorf("expected logout to expire the cookie (MaxAge<0), got %d", c.MaxAge)
+		}
+	}
+	if !found {
+		t.Error("expected logout to send a Set-Cookie clearing the refresh cookie")
+	}
+
+	// The cleared refresh token should no longer work.
+	req = httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: refreshCookieName, Value: refreshToken})
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code == http.StatusOK {
+		t.Error("expected refresh to fail after logout revoked the token")
+	}
+}
+
 func TestRegisterRoutesAppliesSensitiveMiddlewareOnlyToCredentialRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	jwt := NewJWTManager([]byte("test-secret-test-secret-test-secret-32"), 15*time.Minute)
@@ -213,8 +292,7 @@ func TestRegisterRoutesAppliesSensitiveMiddlewareOnlyToCredentialRoutes(t *testi
 		t.Errorf("register: expected sensitive middleware to apply (429), got %d", w.Code)
 	}
 
-	req = httptest.NewRequest("POST", "/api/v1/auth/logout", bytes.NewReader([]byte("{}")))
-	req.Header.Set("Content-Type", "application/json")
+	req = httptest.NewRequest("POST", "/api/v1/auth/logout", nil)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code == http.StatusTooManyRequests {
