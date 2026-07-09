@@ -11,6 +11,20 @@ interface MarkdownContentProps {
   className?: string
 }
 
+const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
+
+// react-markdown's own defaultUrlTransform already blanks out unsafe
+// schemes, but this makes the allow-list explicit and independent of that
+// library default, and drops the anchor entirely instead of leaving a dead
+// `href=""` link that still looks clickable.
+function getSafeHref(href?: string): string | undefined {
+  if (!href) return undefined
+  const trimmed = href.trim()
+  const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed)?.[1]
+  if (!scheme) return trimmed
+  return SAFE_URL_SCHEMES.has(`${scheme.toLowerCase()}:`) ? trimmed : undefined
+}
+
 const inlineComponents: Components = {
   p: ({ children }) => <>{children}</>,
   h1: ({ children }) => <>{children}</>,
@@ -29,6 +43,11 @@ const inlineComponents: Components = {
     <strong className="font-bold text-neutral-900">{children}</strong>
   ),
   em: ({ children }) => <em className="italic">{children}</em>,
+  a: ({ href, children }) => {
+    const safeHref = getSafeHref(href)
+    if (!safeHref) return <>{children}</>
+    return <a href={safeHref}>{children}</a>
+  },
 }
 
 const documentComponents: Components = {
@@ -36,16 +55,20 @@ const documentComponents: Components = {
     <strong className="font-bold text-neutral-900">{children}</strong>
   ),
   em: ({ children }) => <em className="italic">{children}</em>,
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      className="text-primary underline underline-offset-2 hover:text-primary/80"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) => {
+    const safeHref = getSafeHref(href)
+    if (!safeHref) return <>{children}</>
+    return (
+      <a
+        href={safeHref}
+        className="text-primary underline underline-offset-2 hover:text-primary/80"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
+    )
+  },
   code: ({ className, children, ...props }) => {
     const isBlock = Boolean(className)
     if (isBlock) {

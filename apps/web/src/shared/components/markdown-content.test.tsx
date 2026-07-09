@@ -37,6 +37,64 @@ describe('MarkdownContent', () => {
     expect(link).toHaveAttribute('href', 'https://example.com')
   })
 
+  it('renders mailto links in document variant', () => {
+    render(
+      <MarkdownContent
+        content="Contact [us](mailto:team@example.com)"
+        variant="document"
+      />,
+    )
+    const link = screen.getByRole('link', { name: 'us' })
+    expect(link).toHaveAttribute('href', 'mailto:team@example.com')
+  })
+
+  it('renders relative links in document variant', () => {
+    render(
+      <MarkdownContent content="See [notes](/notes/123)" variant="document" />,
+    )
+    const link = screen.getByRole('link', { name: 'notes' })
+    expect(link).toHaveAttribute('href', '/notes/123')
+  })
+
+  it('strips javascript: links in document variant instead of rendering a clickable anchor', () => {
+    const { container } = render(
+      <MarkdownContent
+        content="[click me](javascript:alert(document.cookie))"
+        variant="document"
+      />,
+    )
+    expect(
+      screen.queryByRole('link', { name: 'click me' }),
+    ).not.toBeInTheDocument()
+    expect(container.querySelector('a')).not.toBeInTheDocument()
+    expect(screen.getByText('click me')).toBeInTheDocument()
+  })
+
+  it('strips data: links in document variant instead of rendering a clickable anchor', () => {
+    render(
+      <MarkdownContent
+        content="[click me](data:text/html,<script>alert(1)</script>)"
+        variant="document"
+      />,
+    )
+    expect(
+      screen.queryByRole('link', { name: 'click me' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('strips javascript: links in inline variant instead of rendering a clickable anchor', () => {
+    render(
+      <MarkdownContent
+        content="[click me](javascript:alert(document.cookie))"
+        variant="inline"
+      />,
+    )
+    expect(
+      screen.queryByRole('link', { name: 'click me' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('click me')).toBeInTheDocument()
+  })
+
   it('does not render block elements in inline variant', () => {
     const { container } = render(
       <MarkdownContent content="# Heading\n- item" variant="inline" />,
