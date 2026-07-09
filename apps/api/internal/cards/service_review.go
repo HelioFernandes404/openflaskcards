@@ -229,9 +229,9 @@ type deckLocker interface {
 	CountNewCardsStudiedToday(ctx context.Context, arg db.CountNewCardsStudiedTodayParams) (int64, error)
 }
 
-// newCardsQuotaForUpdate is the transactional counterpart of newCardsQuota:
-// it locks the deck row (SELECT ... FOR UPDATE) so the studied-today count
-// it reads can't be raced by a concurrent review in the same deck.
+// newCardsQuotaForUpdate locks the deck row (SELECT ... FOR UPDATE) so the
+// studied-today count it reads can't be raced by a concurrent review in the
+// same deck.
 func newCardsQuotaForUpdate(ctx context.Context, q deckLocker, deckID, userID uuid.UUID) (studied int64, limit int32, err error) {
 	deck, err := q.GetDeckByIDForUpdate(ctx, deckID)
 	if err != nil {
@@ -240,22 +240,6 @@ func newCardsQuotaForUpdate(ctx context.Context, q deckLocker, deckID, userID uu
 	now := time.Now().UTC()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	studied, err = q.CountNewCardsStudiedToday(ctx, db.CountNewCardsStudiedTodayParams{
-		DeckID: deckID, UserID: userID, ReviewDatetime: startOfDay,
-	})
-	if err != nil {
-		return 0, 0, err
-	}
-	return studied, deck.NewCardsDailyLimit, nil
-}
-
-func (s *Service) newCardsQuota(ctx context.Context, deckID, userID uuid.UUID) (studied int64, limit int32, err error) {
-	deck, err := s.q.GetDeckByID(ctx, deckID)
-	if err != nil {
-		return 0, 0, apperror.ErrDeckNotFound
-	}
-	now := time.Now().UTC()
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	studied, err = s.q.CountNewCardsStudiedToday(ctx, db.CountNewCardsStudiedTodayParams{
 		DeckID: deckID, UserID: userID, ReviewDatetime: startOfDay,
 	})
 	if err != nil {
