@@ -1,40 +1,72 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap");
 @import "tailwindcss";
 
-/* Obsidian Flux (Dark Liquid Glass) — shared with apps/web */
+/*
+ * Obsidian Flux — dark-only, monochromatic minimalist design system.
+ * White (#ECEDF1) on near-black (#0A0A0D). Depth via surface steps + 1px borders.
+ * No glassmorphism · no box-shadow · no gradients.
+ *
+ * Token values are kept in sync with apps/web/src/index.css.
+ *
+ * Surface scale (neutral-0=darkest, neutral-900=lightest):
+ *   neutral-0   #0A0A0D  page background
+ *   neutral-50  #101014  surface-lowest
+ *   neutral-100 #15151A  surface-low (cards L1, inputs)
+ *   neutral-200 #1C1C22  surface (cards L2)
+ *   neutral-300 #222229  surface-high (modals, L3)
+ *   neutral-400 #2B2B33  surface-highest
+ *   neutral-500 #4A4A55  muted / disabled text
+ *   neutral-600 #8888A0  on-surface-variant (secondary text)
+ *   neutral-700 #AAAABC  intermediate
+ *   neutral-800 #D0D1D5  near-white
+ *   neutral-900 #ECEDF1  primary text
+ */
 
 :root {
-  --token-color-primary-100: #DBFCFF;
-  --token-color-primary-300: #7DF4FF;
-  --token-color-primary-500: #00DBE9;
-  --token-color-primary-600: #00F0FF;
-  --token-color-primary-900: #006970;
+  /* Primary (white) interactive scale */
+  --token-color-primary-100: #ecedf1;
+  --token-color-primary-300: #d0d1d5;
+  --token-color-primary-500: #ecedf1;
+  --token-color-primary-600: #d0d1d5;
+  --token-color-primary-900: #0a0a0d;
 
-  --token-color-secondary-500: #7000FF;
-  --token-color-tertiary-500: #FFB1C3;
+  /* Secondary + tertiary — neutral grays */
+  --token-color-secondary-500: #35353e;
+  --token-color-tertiary-500: #8888a0;
 
-  --token-color-neutral-0: #0E0E10;
-  --token-color-neutral-50: #131315;
-  --token-color-neutral-100: #1C1B1D;
-  --token-color-neutral-200: #201F21;
-  --token-color-neutral-300: #2A2A2C;
-  --token-color-neutral-400: #353437;
-  --token-color-neutral-500: #849495;
-  --token-color-neutral-600: #B9CACB;
-  --token-color-neutral-700: #CFD6D6;
-  --token-color-neutral-800: #DCDCDE;
-  --token-color-neutral-900: #E5E1E4;
+  /* Neutral surface scale */
+  --token-color-neutral-0: #0a0a0d;
+  --token-color-neutral-50: #101014;
+  --token-color-neutral-100: #15151a;
+  --token-color-neutral-200: #1c1c22;
+  --token-color-neutral-300: #222229;
+  --token-color-neutral-400: #2b2b33;
+  --token-color-neutral-500: #4a4a55;
+  --token-color-neutral-600: #8888a0;
+  --token-color-neutral-700: #aaaabc;
+  --token-color-neutral-800: #d0d1d5;
+  --token-color-neutral-900: #ecedf1;
 
-  --token-color-success-50: #14532D;
-  --token-color-success-200: #166534;
-  --token-color-success-600: #4ADE80;
-  --token-color-success-800: #BBF7D0;
-  --token-color-success-900: #F0FDF4;
+  /* Support — oklch semantic (same L/C, hue-only varies) */
+  --token-color-success-50: oklch(14% 0.04 145);
+  --token-color-success-200: oklch(25% 0.05 145);
+  --token-color-success-600: oklch(68% 0.13 145);
+  --token-color-success-800: oklch(80% 0.1 145);
+  --token-color-success-900: oklch(90% 0.05 145);
 
-  --token-color-danger-50: #93000A;
-  --token-color-danger-200: #FFB4AB;
-  --token-color-danger-800: #FFDAD6;
+  --token-color-danger-50: oklch(14% 0.04 25);
+  --token-color-danger-200: oklch(25% 0.05 25);
+  --token-color-danger-800: oklch(68% 0.13 25);
 
+  --token-color-warning-50: oklch(14% 0.04 85);
+  --token-color-warning-200: oklch(25% 0.05 85);
+  --token-color-warning-600: oklch(68% 0.13 85);
+
+  --token-color-info-50: oklch(14% 0.04 240);
+  --token-color-info-200: oklch(25% 0.05 240);
+  --token-color-info-600: oklch(68% 0.13 240);
+
+  /* Spacing (8px base) */
   --token-spacing-0-5: 0.125rem;
   --token-spacing-1: 0.25rem;
   --token-spacing-2: 0.5rem;
@@ -59,6 +91,7 @@
   --token-spacing-container-lg: 74.375rem;
   --token-spacing-container-xl: 82.5rem;
 
+  /* Typography */
   --token-typography-family-sans: "Inter", "sans-serif";
   --token-typography-family-display: "Space Grotesk", "sans-serif";
   --token-typography-size-625: 0.625rem;
@@ -85,16 +118,19 @@
   --token-typography-weight-500: 500;
   --token-typography-weight-600: 600;
 
-  --token-shadow-brutal-400: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
-  --token-shadow-brutal-300: 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-  --token-shadow-elevation-lg: 0 20px 60px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 219, 233, 0.2);
-  --token-shadow-glow-primary: 0 0 24px rgba(0, 219, 233, 0.25);
+  /* Shadows — all zeroed (border-only depth) */
+  --token-shadow-brutal-400: none;
+  --token-shadow-brutal-300: none;
+  --token-shadow-elevation-lg: none;
+  --token-shadow-glow-primary: none;
 
-  --token-radius-xs: 0.25rem;
-  --token-radius-sm: 0.25rem;
-  --token-radius-md: 0.5rem;
-  --token-radius-xl: 1.5rem;
+  /* Border radius */
+  --token-radius-xs: 0.125rem; /* 2px  — micro */
+  --token-radius-sm: 0.375rem; /* 6px  — buttons/inputs (sm) */
+  --token-radius-md: 0.5rem; /* 8px  — buttons/inputs (md) */
+  --token-radius-xl: 1rem; /* 16px — cards, panels */
 
+  /* — Numeric scale aliases (backward compat) — */
   --color-primary-100: var(--token-color-primary-100);
   --color-primary-300: var(--token-color-primary-300);
   --color-primary-500: var(--token-color-primary-500);
@@ -121,30 +157,56 @@
   --color-danger-50: var(--token-color-danger-50);
   --color-danger-200: var(--token-color-danger-200);
   --color-danger-800: var(--token-color-danger-800);
+  --color-warning-50: var(--token-color-warning-50);
+  --color-warning-200: var(--token-color-warning-200);
+  --color-warning-600: var(--token-color-warning-600);
+  --color-info-50: var(--token-color-info-50);
+  --color-info-200: var(--token-color-info-200);
+  --color-info-600: var(--token-color-info-600);
 
-  --color-surface: #131315;
-  --color-surface-dim: #131315;
-  --color-surface-bright: #39393B;
-  --color-surface-container-lowest: #0E0E10;
-  --color-surface-container-low: #1C1B1D;
-  --color-surface-container: #201F21;
-  --color-surface-container-high: #2A2A2C;
-  --color-surface-container-highest: #353437;
-  --color-on-surface: #E5E1E4;
-  --color-on-surface-variant: #B9CACB;
-  --color-outline: #849495;
-  --color-surface-tint: #00DBE9;
-  --color-primary: #DBFCFF;
-  --color-on-primary: #00363A;
-  --color-primary-container: #00F0FF;
-  --color-on-primary-container: #006970;
-  --color-secondary: #D1BCFF;
-  --color-secondary-container: #7000FF;
-  --color-on-secondary-container: #DDCDFF;
-  --color-error: #FFB4AB;
-  --color-on-error-container: #FFDAD6;
-  --color-on-background: #E5E1E4;
+  /* — Obsidian Flux semantic surface tokens — */
+  --color-surface: #0a0a0d;
+  --color-surface-dim: #0a0a0d;
+  --color-surface-bright: #35353e;
+  --color-surface-container-lowest: #101014;
+  --color-surface-container-low: #15151a;
+  --color-surface-container: #1c1c22;
+  --color-surface-container-high: #222229;
+  --color-surface-container-highest: #2b2b33;
+  --color-on-surface: #ecedf1;
+  --color-on-surface-variant: #8888a0;
+  --color-inverse-surface: #ecedf1;
+  --color-inverse-on-surface: #0a0a0d;
+  --color-outline: #2e2e3a;
+  --color-outline-variant: #1a1a22;
+  --color-outline-subtle: #1a1a22;
+  --color-outline-strong: #3e3e4c;
+  --color-surface-tint: #ecedf1;
+  --color-primary: #ecedf1;
+  --color-on-primary: #0a0a0d;
+  --color-primary-container: #d0d1d5;
+  --color-on-primary-container: #0a0a0d;
+  --color-inverse-primary: #0a0a0d;
+  --color-secondary: #8888a0;
+  --color-on-secondary: #0a0a0d;
+  --color-secondary-container: #35353e;
+  --color-on-secondary-container: #ecedf1;
+  --color-tertiary: #aaaabc;
+  --color-on-tertiary: #0a0a0d;
+  --color-tertiary-container: #2b2b33;
+  --color-on-tertiary-container: #ecedf1;
+  --color-error: oklch(68% 0.13 25);
+  --color-on-error: #0a0a0d;
+  --color-error-container: oklch(14% 0.04 25);
+  --color-on-error-container: oklch(80% 0.1 25);
+  --color-on-background: #ecedf1;
+  --color-surface-variant: #2b2b33;
 
+  /* Interactive state tokens */
+  --color-primary-hover: #d0d1d5;
+  --color-primary-active: #b8b9bc;
+
+  /* Spacing aliases */
   --spacing-15: var(--token-spacing-15);
   --spacing-18: var(--token-spacing-18);
   --spacing-25: var(--token-spacing-25);
@@ -153,11 +215,15 @@
   --spacing-45-5: var(--token-spacing-45-5);
   --spacing-140: var(--token-spacing-140);
 
-  --shadow-brutal-400: var(--token-shadow-brutal-400);
-  --shadow-brutal-300: var(--token-shadow-brutal-300);
-  --shadow-elevation-lg: var(--token-shadow-elevation-lg);
-  --shadow-glow-primary: var(--token-shadow-glow-primary);
+  /* Shadow aliases (all none) */
+  --shadow-brutal-400: none;
+  --shadow-brutal-300: none;
+  --shadow-elevation-lg: none;
+  --shadow-glow-primary: none;
 
+  /* Radius aliases */
+  --radius-xs: var(--token-radius-xs);
+  --radius-sm: var(--token-radius-sm);
   --radius-md: var(--token-radius-md);
   --radius-xl: var(--token-radius-xl);
 
@@ -190,6 +256,12 @@
   --color-danger-50: var(--token-color-danger-50);
   --color-danger-200: var(--token-color-danger-200);
   --color-danger-800: var(--token-color-danger-800);
+  --color-warning-50: var(--token-color-warning-50);
+  --color-warning-200: var(--token-color-warning-200);
+  --color-warning-600: var(--token-color-warning-600);
+  --color-info-50: var(--token-color-info-50);
+  --color-info-200: var(--token-color-info-200);
+  --color-info-600: var(--token-color-info-600);
   --color-secondary-500: var(--token-color-secondary-500);
   --color-tertiary-500: var(--token-color-tertiary-500);
   --color-surface: var(--color-surface);
@@ -202,18 +274,34 @@
   --color-surface-container-highest: var(--color-surface-container-highest);
   --color-on-surface: var(--color-on-surface);
   --color-on-surface-variant: var(--color-on-surface-variant);
+  --color-inverse-surface: var(--color-inverse-surface);
+  --color-inverse-on-surface: var(--color-inverse-on-surface);
   --color-outline: var(--color-outline);
+  --color-outline-variant: var(--color-outline-variant);
+  --color-outline-subtle: var(--color-outline-subtle);
+  --color-outline-strong: var(--color-outline-strong);
   --color-surface-tint: var(--color-surface-tint);
   --color-primary: var(--color-primary);
   --color-on-primary: var(--color-on-primary);
   --color-primary-container: var(--color-primary-container);
   --color-on-primary-container: var(--color-on-primary-container);
+  --color-inverse-primary: var(--color-inverse-primary);
   --color-secondary: var(--color-secondary);
+  --color-on-secondary: var(--color-on-secondary);
   --color-secondary-container: var(--color-secondary-container);
   --color-on-secondary-container: var(--color-on-secondary-container);
+  --color-tertiary: var(--color-tertiary);
+  --color-on-tertiary: var(--color-on-tertiary);
+  --color-tertiary-container: var(--color-tertiary-container);
+  --color-on-tertiary-container: var(--color-on-tertiary-container);
   --color-error: var(--color-error);
+  --color-on-error: var(--color-on-error);
+  --color-error-container: var(--color-error-container);
   --color-on-error-container: var(--color-on-error-container);
   --color-on-background: var(--color-on-background);
+  --color-surface-variant: var(--color-surface-variant);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-active: var(--color-primary-active);
   --spacing-15: var(--token-spacing-15);
   --spacing-18: var(--token-spacing-18);
   --spacing-25: var(--token-spacing-25);
@@ -221,6 +309,8 @@
   --spacing-35: var(--token-spacing-35);
   --spacing-45-5: var(--token-spacing-45-5);
   --spacing-140: var(--token-spacing-140);
+  --radius-xs: var(--token-radius-xs);
+  --radius-sm: var(--token-radius-sm);
   --radius-md: var(--token-radius-md);
   --radius-xl: var(--token-radius-xl);
   --shadow-brutal-400: var(--token-shadow-brutal-400);
@@ -284,29 +374,7 @@
   }
 }
 
-@keyframes mesh-drift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(2%, -3%, 0) scale(1.05);
-  }
-}
-
-.mesh-background {
-  background-image:
-    radial-gradient(ellipse 80% 60% at 20% 15%, rgb(112 0 255 / 0.08), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 85% 80%, rgb(255 177 195 / 0.06), transparent 60%),
-    radial-gradient(ellipse 60% 60% at 80% 10%, rgb(0 219 233 / 0.05), transparent 60%);
-  animation: mesh-drift 60s ease-in-out infinite alternate;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .mesh-background {
-    animation: none;
-  }
-
   html {
     scroll-behavior: auto;
   }
@@ -336,5 +404,5 @@
   overflow: visible;
   clip: auto;
   white-space: normal;
-  @apply rounded-md bg-primary-500 text-neutral-0 font-medium shadow-glow-primary;
+  @apply rounded-md bg-primary-500 text-neutral-0 font-medium;
 }

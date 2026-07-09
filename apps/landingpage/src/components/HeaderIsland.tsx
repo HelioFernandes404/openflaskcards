@@ -30,7 +30,7 @@ const languageData = [
 ];
 
 const ctaClass =
-  "hidden sm:flex w-full max-w-fit items-center justify-center text-center text-base font-medium cursor-pointer text-neutral-0 px-4 py-2 rounded-md bg-gradient-to-br from-primary-500 to-secondary-500 border border-white/10 shadow-glow-primary hover:brightness-110 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500";
+  "hidden sm:flex w-full max-w-fit items-center justify-center text-center text-base font-medium cursor-pointer text-on-primary px-4 py-2 rounded-md bg-primary-500 hover:bg-primary-hover active:bg-primary-active active:scale-[0.98] transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-[3px] focus-visible:ring-offset-neutral-0";
 
 const navButtonClass =
   "cursor-pointer text-on-surface-variant hover:text-on-surface bg-transparent border-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-sm";
@@ -110,7 +110,7 @@ export function HeaderIsland({ lang, currentPath, translations }: Props) {
             onClick={() => setIsLangOpen(!isLangOpen)}
             aria-expanded={isLangOpen}
             aria-haspopup="listbox"
-            className="flex items-center gap-2 rounded-md bg-surface-container border border-white/10 hover:bg-surface-container-high cursor-pointer px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            className="flex items-center gap-2 rounded-md bg-surface-container border border-outline hover:border-outline-strong hover:bg-surface-container-high cursor-pointer px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             <Globe size={18} className="text-on-surface-variant" />
             <span className="text-base font-medium text-on-surface-variant uppercase">
@@ -122,7 +122,7 @@ export function HeaderIsland({ lang, currentPath, translations }: Props) {
           {isLangOpen && (
             <div
               role="listbox"
-              className="flex flex-col gap-1 absolute w-40 rounded-md border border-white/10 bg-surface-container-high shadow-brutal-400 overflow-hidden p-1 z-50"
+              className="flex flex-col gap-1 absolute w-40 rounded-md border border-primary-500 bg-surface-container-high overflow-hidden p-1 z-50"
             >
               {languageData.map((lng) => (
                 <button
@@ -164,12 +164,12 @@ export function HeaderIsland({ lang, currentPath, translations }: Props) {
       {isMenuOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
-            className="absolute inset-0 bg-neutral-0/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-neutral-0/80"
             onClick={() => setIsMenuOpen(false)}
             aria-hidden="true"
           />
 
-          <div className="relative bg-surface-container-low border-b border-white/10 w-full h-auto flex flex-col shadow-brutal-400">
+          <div className="relative bg-surface-container-low border-b border-outline w-full h-auto flex flex-col">
             <div className="container relative flex-1 flex flex-col pt-24 pb-12">
               <nav className="flex flex-col gap-8" aria-label="Mobile">
                 <ul className="flex flex-col gap-5">
@@ -189,7 +189,7 @@ export function HeaderIsland({ lang, currentPath, translations }: Props) {
                   <button
                     onClick={() => setIsLangOpen(!isLangOpen)}
                     aria-expanded={isLangOpen}
-                    className="flex items-center gap-2 rounded-md bg-surface-container border border-white/10 hover:bg-surface-container-high cursor-pointer px-3 py-2"
+                    className="flex items-center gap-2 rounded-md bg-surface-container border border-outline hover:border-outline-strong hover:bg-surface-container-high cursor-pointer px-3 py-2"
                   >
                     <Globe size={18} className="text-on-surface-variant" />
                     <span className="text-base font-medium text-on-surface-variant uppercase">
@@ -199,7 +199,7 @@ export function HeaderIsland({ lang, currentPath, translations }: Props) {
                   </button>
 
                   {isLangOpen && (
-                    <div className="flex flex-col gap-1 mt-2 w-40 rounded-md border border-white/10 bg-surface-container-high shadow-brutal-400 overflow-hidden p-1">
+                    <div className="flex flex-col gap-1 mt-2 w-40 rounded-md border border-primary-500 bg-surface-container-high overflow-hidden p-1">
                       {languageData.map((lng) => (
                         <button
                           key={lng.code}
@@ -220,7 +220,7 @@ export function HeaderIsland({ lang, currentPath, translations }: Props) {
                   href={GITHUB_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full max-w-fit flex items-center justify-center text-center text-base font-medium cursor-pointer text-neutral-0 px-4 py-2 rounded-md bg-gradient-to-br from-primary-500 to-secondary-500 border border-white/10 shadow-glow-primary"
+                  className="w-full max-w-fit flex items-center justify-center text-center text-base font-medium cursor-pointer text-on-primary px-4 py-2 rounded-md bg-primary-500 hover:bg-primary-hover active:bg-primary-active active:scale-[0.98] transition-all duration-150 ease-out"
                 >
                   {translations.button}
                 </a>

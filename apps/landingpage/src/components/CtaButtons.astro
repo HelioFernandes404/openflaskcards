@@ -14,11 +14,14 @@ const GITHUB_URL = "https://github.com/HelioFernandes404/openflashcards";
 const QUICKSTART_URL =
   "https://github.com/HelioFernandes404/openflashcards#quick-start";
 
+const focusClass =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-[3px] focus-visible:ring-offset-neutral-0";
+
 const primaryClass =
-  "flex-1 sm:flex-none flex items-center justify-center gap-2 text-center text-base font-medium cursor-pointer text-neutral-0 px-6 py-3 rounded-md bg-gradient-to-br from-primary-500 to-secondary-500 border border-white/10 shadow-glow-primary hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition-all";
+  `flex-1 sm:flex-none flex items-center justify-center gap-2 text-center text-base font-medium cursor-pointer text-on-primary px-6 py-3 rounded-md bg-primary-500 hover:bg-primary-hover active:bg-primary-active active:scale-[0.98] transition-all duration-150 ease-out ${focusClass}`;
 
 const secondaryClass =
-  "flex-1 sm:flex-none flex items-center justify-center text-center text-base font-medium cursor-pointer border border-white/15 bg-white/[0.06] text-on-surface px-6 py-3 rounded-md hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition-all";
+  `flex-1 sm:flex-none flex items-center justify-center text-center text-base font-medium cursor-pointer border border-outline text-on-surface px-6 py-3 rounded-md hover:border-on-surface active:scale-[0.98] transition-all duration-150 ease-out ${focusClass}`;
 ---
 
 <div class:list={["w-full flex flex-col sm:flex-row gap-3", className]}>

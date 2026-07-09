@@ -25,7 +25,7 @@ export function FAQIsland({ items }: FAQProps) {
         const isOpen = openIndex === index;
 
         return (
-          <div key={index} className="border-b border-white/10 last:border-b-0">
+          <div key={index} className="border-b border-outline-variant last:border-b-0">
             <button
               id={`faq-trigger-${index}`}
               onClick={() => toggleItem(index)}

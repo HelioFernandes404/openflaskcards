@@ -17,7 +17,7 @@ const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`;
 const currentYear = new Date().getFullYear();
 ---
 
-<footer class="w-full pt-25 pb-12 lg:pb-20 bg-surface-container-low border-t border-white/10">
+<footer class="w-full pt-25 pb-12 lg:pb-20 bg-surface-container-low border-t border-outline-variant">
   <Container>
     <div
       class="w-full flex flex-col md:flex-row items-center justify-between gap-8 md:gap-0 mb-10"
@@ -30,7 +30,7 @@ const currentYear = new Date().getFullYear();
           target="_blank"
           rel="noopener noreferrer"
           aria-label={t(lang, "footer.social.github")}
-          class="bg-surface-container-high p-2.5 hover:bg-surface-container-highest transition-colors text-on-surface rounded-md border border-white/10 cursor-pointer"
+          class="bg-surface-container-high p-2.5 hover:bg-surface-container-highest transition-colors text-on-surface rounded-md border border-outline cursor-pointer"
         >
           <Github size={18} />
         </a>
@@ -38,14 +38,14 @@ const currentYear = new Date().getFullYear();
 
       <a
         href="#home"
-        class="w-full max-w-fit flex items-center justify-center text-center text-base font-medium cursor-pointer border border-white/10 bg-surface-container text-on-surface py-2.5 gap-2 rounded-md px-4 hover:bg-surface-container-high transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        class="w-full max-w-fit flex items-center justify-center text-center text-base font-medium cursor-pointer border border-outline bg-surface-container text-on-surface py-2.5 gap-2 rounded-md px-4 hover:bg-surface-container-high transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         {t(lang, "footer.backToTop")}
         <ArrowUp size={20} />
       </a>
     </div>
 
-    <hr class="border-white/10 mt-0 mb-8" />
+    <hr class="border-outline-variant mt-0 mb-8" />
 
     <div
       class="w-full flex flex-col lg:flex-row items-center justify-center lg:justify-between text-center md:text-start gap-4 md:gap-2 text-on-surface-variant"

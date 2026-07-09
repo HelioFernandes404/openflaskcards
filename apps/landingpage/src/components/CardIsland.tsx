@@ -82,7 +82,7 @@ export function CardIsland({
 
   return (
     <div
-      className={`rounded-xl border border-white/10 shadow-brutal-400 bg-gradient-to-b from-white/[0.06] to-white/[0.01] backdrop-blur-xl overflow-hidden transition-shadow hover:shadow-elevation-lg ${className ?? ""}`}
+      className={`rounded-xl border border-outline bg-surface-container overflow-hidden transition-colors duration-150 ease-out hover:border-outline-strong ${className ?? ""}`}
     >
       {content && (
         <div
@@ -103,7 +103,7 @@ export function CardIsland({
       )}
 
       {title && (
-        <div className="w-full flex flex-col gap-1 sm:gap-4 p-4 sm:p-8 border-t border-white/10">
+        <div className="w-full flex flex-col gap-1 sm:gap-4 p-4 sm:p-8 border-t border-outline-variant">
           {isLoading ? (
             <>
               <div className="h-7 sm:h-8 bg-surface-container-high animate-pulse rounded w-3/4" />

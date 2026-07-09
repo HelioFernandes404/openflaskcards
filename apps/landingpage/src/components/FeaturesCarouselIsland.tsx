@@ -219,7 +219,7 @@ export function FeaturesCarouselIsland({
           id={`feature-panel-${features[active].id}`}
           role="tabpanel"
           aria-labelledby={`feature-tab-${features[active].id}`}
-          className="flex lg:hidden items-center justify-center bg-surface-container border border-white/10 rounded-xl order-2 lg:order-3 p-4 shadow-brutal-400"
+          className="flex lg:hidden items-center justify-center bg-surface-container border border-outline rounded-xl order-2 lg:order-3 p-4"
         >
           <AnimatePresence mode="wait">
             <motion.div
@@ -247,7 +247,7 @@ export function FeaturesCarouselIsland({
       <div
         role="tabpanel"
         aria-labelledby={`feature-tab-${features[active].id}`}
-        className="relative hidden lg:flex items-center h-140 justify-center bg-surface-container border border-white/10 rounded-xl shadow-brutal-400"
+        className="relative hidden lg:flex items-center h-140 justify-center bg-surface-container border border-outline rounded-xl"
       >
         <AnimatePresence mode="wait">
           <motion.div
