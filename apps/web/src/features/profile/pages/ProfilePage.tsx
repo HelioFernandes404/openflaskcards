@@ -9,6 +9,8 @@ import { Card } from '@/shared/components/card'
 import { Badge } from '@/shared/components/badge'
 import { Select } from '@/shared/components/select'
 import { ApiStudyService } from '@/features/study/services/ApiStudyService'
+import { useNotification } from '@/shared/providers/NotificationProvider'
+import { getUserFacingErrorMessage } from '@/shared/services/userFacingErrors'
 
 const COMMON_TIMEZONES = [
   { value: 'America/Sao_Paulo', label: 'Sao Paulo (UTC-3)' },
@@ -29,6 +31,7 @@ const COMMON_TIMEZONES = [
 export function ProfilePage() {
   const { user, logout, refreshUser } = useAuth()
   const navigate = useNavigate()
+  const { showToast } = useNotification()
   const [savingTimezone, setSavingTimezone] = useState(false)
 
   if (!user) return null
@@ -44,6 +47,13 @@ export function ProfilePage() {
         typeof user
       >)
       await refreshUser()
+    } catch (err) {
+      showToast(
+        getUserFacingErrorMessage(err, {
+          fallbackKey: 'Failed to update timezone. Please try again.',
+        }),
+        'error',
+      )
     } finally {
       setSavingTimezone(false)
     }
