@@ -16,8 +16,8 @@ UPDATE notes
 SET title = COALESCE(sqlc.narg('title'), title),
     content = COALESCE(sqlc.narg('content'), content),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
 -- name: DeleteNote :exec
-DELETE FROM notes WHERE id = $1;
+DELETE FROM notes WHERE id = $1 AND user_id = $2;

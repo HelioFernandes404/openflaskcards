@@ -22,8 +22,8 @@ SET title = COALESCE(sqlc.narg('title'), title),
         ELSE deck_id
     END,
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
 -- name: DeleteLetter :exec
-DELETE FROM letters WHERE id = $1;
+DELETE FROM letters WHERE id = $1 AND user_id = $2;

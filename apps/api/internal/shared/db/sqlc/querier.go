@@ -49,17 +49,17 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeckStatsByUser(ctx context.Context, arg DeckStatsByUserParams) ([]DeckStatsByUserRow, error)
 	DeleteAllRefreshTokensForUser(ctx context.Context, userID uuid.UUID) error
-	DeleteCard(ctx context.Context, id uuid.UUID) error
-	DeleteDeck(ctx context.Context, id uuid.UUID) error
+	DeleteCard(ctx context.Context, arg DeleteCardParams) error
+	DeleteDeck(ctx context.Context, arg DeleteDeckParams) error
 	DeleteExpiredRefreshTokens(ctx context.Context) error
-	DeleteKanbanCard(ctx context.Context, id uuid.UUID) error
-	DeleteLetter(ctx context.Context, id uuid.UUID) error
+	DeleteKanbanCard(ctx context.Context, arg DeleteKanbanCardParams) error
+	DeleteLetter(ctx context.Context, arg DeleteLetterParams) error
 	DeleteMedia(ctx context.Context, arg DeleteMediaParams) error
-	DeleteModule(ctx context.Context, id uuid.UUID) error
-	DeleteNote(ctx context.Context, id uuid.UUID) error
-	DeletePromptTemplate(ctx context.Context, id uuid.UUID) error
+	DeleteModule(ctx context.Context, arg DeleteModuleParams) error
+	DeleteNote(ctx context.Context, arg DeleteNoteParams) error
+	DeletePromptTemplate(ctx context.Context, arg DeletePromptTemplateParams) error
 	DeleteRefreshToken(ctx context.Context, tokenHash string) error
-	DeleteStudyPlan(ctx context.Context, id uuid.UUID) error
+	DeleteStudyPlan(ctx context.Context, arg DeleteStudyPlanParams) error
 	GetCardByID(ctx context.Context, id uuid.UUID) (Card, error)
 	GetDeckByID(ctx context.Context, id uuid.UUID) (Deck, error)
 	// Locks the deck row so a concurrent review submission can't read the same

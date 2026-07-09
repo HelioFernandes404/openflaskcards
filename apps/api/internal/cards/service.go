@@ -174,6 +174,7 @@ func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInp
 	}
 	row, err := s.q.UpdateCard(ctx, db.UpdateCardParams{
 		ID:         id,
+		UserID:     userID,
 		Front:      in.Front,
 		Back:       in.Back,
 		AudioUrl:   in.AudioURL,
@@ -191,7 +192,7 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
 	}
-	return s.q.DeleteCard(ctx, id)
+	return s.q.DeleteCard(ctx, db.DeleteCardParams{ID: id, UserID: userID})
 }
 
 func (s *Service) Move(ctx context.Context, id, newDeckID, userID uuid.UUID) (Card, error) {

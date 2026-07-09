@@ -19,7 +19,7 @@ type querier interface {
 	ListLettersByUser(ctx context.Context, userID uuid.UUID) ([]db.Letter, error)
 	GetLetterByID(ctx context.Context, id uuid.UUID) (db.Letter, error)
 	UpdateLetter(ctx context.Context, arg db.UpdateLetterParams) (db.Letter, error)
-	DeleteLetter(ctx context.Context, id uuid.UUID) error
+	DeleteLetter(ctx context.Context, arg db.DeleteLetterParams) error
 	GetDeckByID(ctx context.Context, id uuid.UUID) (db.Deck, error)
 }
 
@@ -119,6 +119,7 @@ func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInp
 	deckIDSet := in.DeckIDSet
 	row, err := s.q.UpdateLetter(ctx, db.UpdateLetterParams{
 		ID:             id,
+		UserID:         userID,
 		Title:          in.Title,
 		Artist:         in.Artist,
 		OriginalLyrics: in.OriginalLyrics,
@@ -136,7 +137,7 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
 	}
-	return s.q.DeleteLetter(ctx, id)
+	return s.q.DeleteLetter(ctx, db.DeleteLetterParams{ID: id, UserID: userID})
 }
 
 func (s *Service) validateDeckOwnership(ctx context.Context, deckID, userID uuid.UUID) error {

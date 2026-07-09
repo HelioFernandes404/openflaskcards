@@ -132,6 +132,7 @@ func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInp
 
 	params := db.UpdateKanbanCardParams{
 		ID:               id,
+		UserID:           userID,
 		Title:            in.Title,
 		Description:      in.Description,
 		Status:           in.Status,
@@ -177,7 +178,7 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
 	}
-	return s.q.DeleteKanbanCard(ctx, id)
+	return s.q.DeleteKanbanCard(ctx, db.DeleteKanbanCardParams{ID: id, UserID: userID})
 }
 
 // PullNext atomically grabs the earliest "todo" card for userID, moves it to
@@ -208,6 +209,7 @@ func (s *Service) PullNext(ctx context.Context, userID uuid.UUID, assignee strin
 	newStatus := "in_progress"
 	row, err := qtx.UpdateKanbanCard(ctx, db.UpdateKanbanCardParams{
 		ID:       next.ID,
+		UserID:   userID,
 		Status:   &newStatus,
 		Assignee: &assignee,
 		Position: &newPos,

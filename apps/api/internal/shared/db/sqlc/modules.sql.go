@@ -50,11 +50,16 @@ func (q *Queries) CreateModule(ctx context.Context, arg CreateModuleParams) (Mod
 }
 
 const deleteModule = `-- name: DeleteModule :exec
-DELETE FROM modules WHERE id = $1
+DELETE FROM modules WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteModule(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteModule, id)
+type DeleteModuleParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteModule(ctx context.Context, arg DeleteModuleParams) error {
+	_, err := q.db.Exec(ctx, deleteModule, arg.ID, arg.UserID)
 	return err
 }
 
@@ -120,7 +125,7 @@ SET name = COALESCE($2, name),
     sort_order = COALESCE($4, sort_order),
     prompt_module_type_id = COALESCE($5, prompt_module_type_id),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $6
 RETURNING id, user_id, name, description, sort_order, created_at, updated_at, prompt_module_type_id
 `
 
@@ -130,6 +135,7 @@ type UpdateModuleParams struct {
 	Description        *string   `json:"description"`
 	SortOrder          *int32    `json:"sort_order"`
 	PromptModuleTypeID *string   `json:"prompt_module_type_id"`
+	UserID             uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdateModule(ctx context.Context, arg UpdateModuleParams) (Module, error) {
@@ -139,6 +145,7 @@ func (q *Queries) UpdateModule(ctx context.Context, arg UpdateModuleParams) (Mod
 		arg.Description,
 		arg.SortOrder,
 		arg.PromptModuleTypeID,
+		arg.UserID,
 	)
 	var i Module
 	err := row.Scan(

@@ -27,8 +27,8 @@ SET name = COALESCE(sqlc.narg('name'), name),
         ELSE module_id
     END,
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
 -- name: DeleteDeck :exec
-DELETE FROM decks WHERE id = $1;
+DELETE FROM decks WHERE id = $1 AND user_id = $2;

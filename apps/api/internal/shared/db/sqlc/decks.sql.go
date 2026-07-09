@@ -53,11 +53,16 @@ func (q *Queries) CreateDeck(ctx context.Context, arg CreateDeckParams) (Deck, e
 }
 
 const deleteDeck = `-- name: DeleteDeck :exec
-DELETE FROM decks WHERE id = $1
+DELETE FROM decks WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteDeck(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteDeck, id)
+type DeleteDeckParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteDeck(ctx context.Context, arg DeleteDeckParams) error {
+	_, err := q.db.Exec(ctx, deleteDeck, arg.ID, arg.UserID)
 	return err
 }
 
@@ -150,7 +155,7 @@ SET name = COALESCE($2, name),
         ELSE module_id
     END,
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $8
 RETURNING id, user_id, name, description, tags, new_cards_daily_limit, created_at, updated_at, module_id
 `
 
@@ -162,6 +167,7 @@ type UpdateDeckParams struct {
 	NewCardsDailyLimit *int32     `json:"new_cards_daily_limit"`
 	ModuleIDSet        *bool      `json:"module_id_set"`
 	ModuleID           *uuid.UUID `json:"module_id"`
+	UserID             uuid.UUID  `json:"user_id"`
 }
 
 func (q *Queries) UpdateDeck(ctx context.Context, arg UpdateDeckParams) (Deck, error) {
@@ -173,6 +179,7 @@ func (q *Queries) UpdateDeck(ctx context.Context, arg UpdateDeckParams) (Deck, e
 		arg.NewCardsDailyLimit,
 		arg.ModuleIDSet,
 		arg.ModuleID,
+		arg.UserID,
 	)
 	var i Deck
 	err := row.Scan(

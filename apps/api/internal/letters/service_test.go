@@ -70,8 +70,8 @@ func (f *fakeQuerier) UpdateLetter(_ context.Context, arg db.UpdateLetterParams)
 	return l, nil
 }
 
-func (f *fakeQuerier) DeleteLetter(_ context.Context, id uuid.UUID) error {
-	delete(f.letters, id)
+func (f *fakeQuerier) DeleteLetter(_ context.Context, arg db.DeleteLetterParams) error {
+	delete(f.letters, arg.ID)
 	return nil
 }
 

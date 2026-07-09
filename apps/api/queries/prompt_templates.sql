@@ -18,8 +18,8 @@ UPDATE prompt_templates
 SET name = COALESCE(sqlc.narg('name'), name),
     body = COALESCE(sqlc.narg('body'), body),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
 -- name: DeletePromptTemplate :exec
-DELETE FROM prompt_templates WHERE id = $1;
+DELETE FROM prompt_templates WHERE id = $1 AND user_id = $2;

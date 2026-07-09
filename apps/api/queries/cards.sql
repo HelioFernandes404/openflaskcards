@@ -98,7 +98,8 @@ SET front = COALESCE(sqlc.narg('front'), front),
     fonetica = COALESCE(sqlc.narg('fonetica'), fonetica),
     tts_enabled = COALESCE(sqlc.narg('tts_enabled'), tts_enabled),
     updated_at = NOW()
-WHERE id = $1
+WHERE cards.id = $1
+  AND deck_id IN (SELECT decks.id FROM decks WHERE decks.user_id = sqlc.arg('user_id'))
 RETURNING *;
 
 -- name: UpdateCardAfterReview :one
@@ -117,7 +118,8 @@ WHERE id = $1 AND row_version = $10
 RETURNING *;
 
 -- name: DeleteCard :exec
-DELETE FROM cards WHERE id = $1;
+DELETE FROM cards WHERE cards.id = $1
+  AND deck_id IN (SELECT decks.id FROM decks WHERE decks.user_id = $2);
 
 -- name: MoveCard :one
 UPDATE cards

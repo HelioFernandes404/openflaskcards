@@ -40,11 +40,16 @@ func (q *Queries) CreatePromptTemplate(ctx context.Context, arg CreatePromptTemp
 }
 
 const deletePromptTemplate = `-- name: DeletePromptTemplate :exec
-DELETE FROM prompt_templates WHERE id = $1
+DELETE FROM prompt_templates WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeletePromptTemplate(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deletePromptTemplate, id)
+type DeletePromptTemplateParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeletePromptTemplate(ctx context.Context, arg DeletePromptTemplateParams) error {
+	_, err := q.db.Exec(ctx, deletePromptTemplate, arg.ID, arg.UserID)
 	return err
 }
 
@@ -104,18 +109,24 @@ UPDATE prompt_templates
 SET name = COALESCE($2, name),
     body = COALESCE($3, body),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $4
 RETURNING id, user_id, name, body, created_at, updated_at
 `
 
 type UpdatePromptTemplateParams struct {
-	ID   uuid.UUID `json:"id"`
-	Name *string   `json:"name"`
-	Body *string   `json:"body"`
+	ID     uuid.UUID `json:"id"`
+	Name   *string   `json:"name"`
+	Body   *string   `json:"body"`
+	UserID uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdatePromptTemplate(ctx context.Context, arg UpdatePromptTemplateParams) (PromptTemplate, error) {
-	row := q.db.QueryRow(ctx, updatePromptTemplate, arg.ID, arg.Name, arg.Body)
+	row := q.db.QueryRow(ctx, updatePromptTemplate,
+		arg.ID,
+		arg.Name,
+		arg.Body,
+		arg.UserID,
+	)
 	var i PromptTemplate
 	err := row.Scan(
 		&i.ID,

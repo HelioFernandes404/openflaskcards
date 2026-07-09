@@ -91,9 +91,10 @@ func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInp
 		name = &trimmed
 	}
 	row, err := s.q.UpdatePromptTemplate(ctx, db.UpdatePromptTemplateParams{
-		ID:   id,
-		Name: name,
-		Body: body,
+		ID:     id,
+		UserID: userID,
+		Name:   name,
+		Body:   body,
 	})
 	if err != nil {
 		return PromptTemplate{}, mapDBError(err)
@@ -105,7 +106,7 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
 	}
-	return s.q.DeletePromptTemplate(ctx, id)
+	return s.q.DeletePromptTemplate(ctx, db.DeletePromptTemplateParams{ID: id, UserID: userID})
 }
 
 func validateBody(body string) (string, error) {

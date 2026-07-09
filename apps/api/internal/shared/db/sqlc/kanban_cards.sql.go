@@ -60,11 +60,16 @@ func (q *Queries) CreateKanbanCard(ctx context.Context, arg CreateKanbanCardPara
 }
 
 const deleteKanbanCard = `-- name: DeleteKanbanCard :exec
-DELETE FROM kanban_cards WHERE id = $1
+DELETE FROM kanban_cards WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteKanbanCard(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteKanbanCard, id)
+type DeleteKanbanCardParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteKanbanCard(ctx context.Context, arg DeleteKanbanCardParams) error {
+	_, err := q.db.Exec(ctx, deleteKanbanCard, arg.ID, arg.UserID)
 	return err
 }
 
@@ -237,7 +242,7 @@ SET title = COALESCE($2, title),
     type = COALESCE($8, type),
     verification_note = COALESCE($9, verification_note),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $10
 RETURNING id, user_id, title, description, status, priority, assignee, position, verification_note, created_at, updated_at, type
 `
 
@@ -251,6 +256,7 @@ type UpdateKanbanCardParams struct {
 	Position         *int32    `json:"position"`
 	Type             *string   `json:"type"`
 	VerificationNote *string   `json:"verification_note"`
+	UserID           uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdateKanbanCard(ctx context.Context, arg UpdateKanbanCardParams) (KanbanCard, error) {
@@ -264,6 +270,7 @@ func (q *Queries) UpdateKanbanCard(ctx context.Context, arg UpdateKanbanCardPara
 		arg.Position,
 		arg.Type,
 		arg.VerificationNote,
+		arg.UserID,
 	)
 	var i KanbanCard
 	err := row.Scan(

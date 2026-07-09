@@ -60,11 +60,16 @@ func (q *Queries) CreateStudyPlan(ctx context.Context, arg CreateStudyPlanParams
 }
 
 const deleteStudyPlan = `-- name: DeleteStudyPlan :exec
-DELETE FROM study_plans WHERE id = $1
+DELETE FROM study_plans WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteStudyPlan(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteStudyPlan, id)
+type DeleteStudyPlanParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteStudyPlan(ctx context.Context, arg DeleteStudyPlanParams) error {
+	_, err := q.db.Exec(ctx, deleteStudyPlan, arg.ID, arg.UserID)
 	return err
 }
 
@@ -139,7 +144,7 @@ SET title = COALESCE($2, title),
     no_fixed_deadline = COALESCE($7, no_fixed_deadline),
     steps = COALESCE($8, steps),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $9
 RETURNING id, user_id, title, level, goal, golden_rule, flexibility, no_fixed_deadline, steps, created_at, updated_at, progress
 `
 
@@ -152,6 +157,7 @@ type UpdateStudyPlanParams struct {
 	Flexibility     *string   `json:"flexibility"`
 	NoFixedDeadline *bool     `json:"no_fixed_deadline"`
 	Steps           []byte    `json:"steps"`
+	UserID          uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdateStudyPlan(ctx context.Context, arg UpdateStudyPlanParams) (StudyPlan, error) {
@@ -164,6 +170,7 @@ func (q *Queries) UpdateStudyPlan(ctx context.Context, arg UpdateStudyPlanParams
 		arg.Flexibility,
 		arg.NoFixedDeadline,
 		arg.Steps,
+		arg.UserID,
 	)
 	var i StudyPlan
 	err := row.Scan(
@@ -187,17 +194,18 @@ const updateStudyPlanProgress = `-- name: UpdateStudyPlanProgress :one
 UPDATE study_plans
 SET progress = $2,
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $3
 RETURNING id, user_id, title, level, goal, golden_rule, flexibility, no_fixed_deadline, steps, created_at, updated_at, progress
 `
 
 type UpdateStudyPlanProgressParams struct {
 	ID       uuid.UUID `json:"id"`
 	Progress []byte    `json:"progress"`
+	UserID   uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdateStudyPlanProgress(ctx context.Context, arg UpdateStudyPlanProgressParams) (StudyPlan, error) {
-	row := q.db.QueryRow(ctx, updateStudyPlanProgress, arg.ID, arg.Progress)
+	row := q.db.QueryRow(ctx, updateStudyPlanProgress, arg.ID, arg.Progress, arg.UserID)
 	var i StudyPlan
 	err := row.Scan(
 		&i.ID,

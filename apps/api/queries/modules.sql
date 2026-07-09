@@ -20,8 +20,8 @@ SET name = COALESCE(sqlc.narg('name'), name),
     sort_order = COALESCE(sqlc.narg('sort_order'), sort_order),
     prompt_module_type_id = COALESCE(sqlc.narg('prompt_module_type_id'), prompt_module_type_id),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
 -- name: DeleteModule :exec
-DELETE FROM modules WHERE id = $1;
+DELETE FROM modules WHERE id = $1 AND user_id = $2;

@@ -46,8 +46,8 @@ SET title = COALESCE(sqlc.narg('title'), title),
     type = COALESCE(sqlc.narg('type'), type),
     verification_note = COALESCE(sqlc.narg('verification_note'), verification_note),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
 -- name: DeleteKanbanCard :exec
-DELETE FROM kanban_cards WHERE id = $1;
+DELETE FROM kanban_cards WHERE id = $1 AND user_id = $2;

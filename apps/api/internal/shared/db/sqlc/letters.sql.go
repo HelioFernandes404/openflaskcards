@@ -53,11 +53,16 @@ func (q *Queries) CreateLetter(ctx context.Context, arg CreateLetterParams) (Let
 }
 
 const deleteLetter = `-- name: DeleteLetter :exec
-DELETE FROM letters WHERE id = $1
+DELETE FROM letters WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteLetter(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteLetter, id)
+type DeleteLetterParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteLetter(ctx context.Context, arg DeleteLetterParams) error {
+	_, err := q.db.Exec(ctx, deleteLetter, arg.ID, arg.UserID)
 	return err
 }
 
@@ -127,7 +132,7 @@ SET title = COALESCE($2, title),
         ELSE deck_id
     END,
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $8
 RETURNING id, user_id, title, artist, original_lyrics, translation, deck_id, created_at, updated_at
 `
 
@@ -139,6 +144,7 @@ type UpdateLetterParams struct {
 	Translation    *string    `json:"translation"`
 	DeckIDSet      *bool      `json:"deck_id_set"`
 	DeckID         *uuid.UUID `json:"deck_id"`
+	UserID         uuid.UUID  `json:"user_id"`
 }
 
 func (q *Queries) UpdateLetter(ctx context.Context, arg UpdateLetterParams) (Letter, error) {
@@ -150,6 +156,7 @@ func (q *Queries) UpdateLetter(ctx context.Context, arg UpdateLetterParams) (Let
 		arg.Translation,
 		arg.DeckIDSet,
 		arg.DeckID,
+		arg.UserID,
 	)
 	var i Letter
 	err := row.Scan(

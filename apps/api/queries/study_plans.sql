@@ -21,15 +21,15 @@ SET title = COALESCE(sqlc.narg('title'), title),
     no_fixed_deadline = COALESCE(sqlc.narg('no_fixed_deadline'), no_fixed_deadline),
     steps = COALESCE(sqlc.narg('steps'), steps),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
 -- name: UpdateStudyPlanProgress :one
 UPDATE study_plans
 SET progress = $2,
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $3
 RETURNING *;
 
 -- name: DeleteStudyPlan :exec
-DELETE FROM study_plans WHERE id = $1;
+DELETE FROM study_plans WHERE id = $1 AND user_id = $2;

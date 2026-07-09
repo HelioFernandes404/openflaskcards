@@ -40,11 +40,16 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, e
 }
 
 const deleteNote = `-- name: DeleteNote :exec
-DELETE FROM notes WHERE id = $1
+DELETE FROM notes WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteNote(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteNote, id)
+type DeleteNoteParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteNote(ctx context.Context, arg DeleteNoteParams) error {
+	_, err := q.db.Exec(ctx, deleteNote, arg.ID, arg.UserID)
 	return err
 }
 
@@ -102,7 +107,7 @@ UPDATE notes
 SET title = COALESCE($2, title),
     content = COALESCE($3, content),
     updated_at = NOW()
-WHERE id = $1
+WHERE id = $1 AND user_id = $4
 RETURNING id, user_id, title, content, created_at, updated_at
 `
 
@@ -110,10 +115,16 @@ type UpdateNoteParams struct {
 	ID      uuid.UUID `json:"id"`
 	Title   *string   `json:"title"`
 	Content *string   `json:"content"`
+	UserID  uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdateNote(ctx context.Context, arg UpdateNoteParams) (Note, error) {
-	row := q.db.QueryRow(ctx, updateNote, arg.ID, arg.Title, arg.Content)
+	row := q.db.QueryRow(ctx, updateNote,
+		arg.ID,
+		arg.Title,
+		arg.Content,
+		arg.UserID,
+	)
 	var i Note
 	err := row.Scan(
 		&i.ID,

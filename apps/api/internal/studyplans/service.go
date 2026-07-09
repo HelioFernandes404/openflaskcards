@@ -136,6 +136,7 @@ func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInp
 	}
 	row, err := s.q.UpdateStudyPlan(ctx, db.UpdateStudyPlanParams{
 		ID:              id,
+		UserID:          userID,
 		Title:           in.Title,
 		Level:           in.Level,
 		Goal:            in.Goal,
@@ -154,7 +155,7 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
 	}
-	return s.q.DeleteStudyPlan(ctx, id)
+	return s.q.DeleteStudyPlan(ctx, db.DeleteStudyPlanParams{ID: id, UserID: userID})
 }
 
 func (s *Service) GetProgress(ctx context.Context, id, userID uuid.UUID) (ProgressRecord, error) {
@@ -187,6 +188,7 @@ func (s *Service) SaveProgress(ctx context.Context, id, userID uuid.UUID, in Pro
 	}
 	row, err := s.q.UpdateStudyPlanProgress(ctx, db.UpdateStudyPlanProgressParams{
 		ID:       id,
+		UserID:   userID,
 		Progress: progressJSON,
 	})
 	if err != nil {

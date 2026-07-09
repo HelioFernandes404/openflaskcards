@@ -84,6 +84,7 @@ func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInp
 	}
 	row, err := s.q.UpdateNote(ctx, db.UpdateNoteParams{
 		ID:      id,
+		UserID:  userID,
 		Title:   in.Title,
 		Content: in.Content,
 	})
@@ -97,7 +98,7 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
 	}
-	return s.q.DeleteNote(ctx, id)
+	return s.q.DeleteNote(ctx, db.DeleteNoteParams{ID: id, UserID: userID})
 }
 
 func mapNote(row db.Note) Note {

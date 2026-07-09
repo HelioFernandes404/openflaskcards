@@ -462,11 +462,17 @@ func (q *Queries) DeckStatsByUser(ctx context.Context, arg DeckStatsByUserParams
 }
 
 const deleteCard = `-- name: DeleteCard :exec
-DELETE FROM cards WHERE id = $1
+DELETE FROM cards WHERE cards.id = $1
+  AND deck_id IN (SELECT decks.id FROM decks WHERE decks.user_id = $2)
 `
 
-func (q *Queries) DeleteCard(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteCard, id)
+type DeleteCardParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteCard(ctx context.Context, arg DeleteCardParams) error {
+	_, err := q.db.Exec(ctx, deleteCard, arg.ID, arg.UserID)
 	return err
 }
 
@@ -783,7 +789,8 @@ SET front = COALESCE($2, front),
     fonetica = COALESCE($6, fonetica),
     tts_enabled = COALESCE($7, tts_enabled),
     updated_at = NOW()
-WHERE id = $1
+WHERE cards.id = $1
+  AND deck_id IN (SELECT decks.id FROM decks WHERE decks.user_id = $8)
 RETURNING id, deck_id, front, back, audio_url, imagem_url, fonetica, tts_enabled, stability, difficulty, due, last_review, state, reps, lapses, fsrs_card_json, row_version, created_at, updated_at
 `
 
@@ -795,6 +802,7 @@ type UpdateCardParams struct {
 	ImagemUrl  *string   `json:"imagem_url"`
 	Fonetica   *string   `json:"fonetica"`
 	TtsEnabled *bool     `json:"tts_enabled"`
+	UserID     uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdateCard(ctx context.Context, arg UpdateCardParams) (Card, error) {
@@ -806,6 +814,7 @@ func (q *Queries) UpdateCard(ctx context.Context, arg UpdateCardParams) (Card, e
 		arg.ImagemUrl,
 		arg.Fonetica,
 		arg.TtsEnabled,
+		arg.UserID,
 	)
 	var i Card
 	err := row.Scan(

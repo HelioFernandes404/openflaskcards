@@ -104,6 +104,7 @@ func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInp
 	}
 	row, err := s.q.UpdateModule(ctx, db.UpdateModuleParams{
 		ID:                 id,
+		UserID:             userID,
 		Name:               in.Name,
 		Description:        in.Description,
 		SortOrder:          in.SortOrder,
@@ -119,7 +120,7 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
 	}
-	return s.q.DeleteModule(ctx, id)
+	return s.q.DeleteModule(ctx, db.DeleteModuleParams{ID: id, UserID: userID})
 }
 
 func mapModule(row db.Module) Module {

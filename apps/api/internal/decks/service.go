@@ -108,6 +108,7 @@ func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInp
 	}
 	row, err := s.q.UpdateDeck(ctx, db.UpdateDeckParams{
 		ID:                 id,
+		UserID:             userID,
 		Name:               in.Name,
 		Description:        in.Description,
 		Tags:               in.Tags,
@@ -125,7 +126,7 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
 	}
-	return s.q.DeleteDeck(ctx, id)
+	return s.q.DeleteDeck(ctx, db.DeleteDeckParams{ID: id, UserID: userID})
 }
 
 type DeckStats struct {
