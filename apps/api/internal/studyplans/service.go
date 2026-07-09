@@ -165,10 +165,22 @@ func (s *Service) GetProgress(ctx context.Context, id, userID uuid.UUID) (Progre
 	return plan.Progress, nil
 }
 
+// maxXpPerSave and maxStreakIncrementPerSave bound how much a single
+// SaveProgress call may move totalXp/longestStreak forward. The client
+// payload is never trusted as authoritative: values are clamped relative
+// to the previously persisted state so a single request can't arbitrarily
+// inflate gamification metrics.
+const (
+	maxXpPerSave              = 1000
+	maxStreakIncrementPerSave = 1
+)
+
 func (s *Service) SaveProgress(ctx context.Context, id, userID uuid.UUID, in ProgressRecord) (ProgressRecord, error) {
-	if _, err := s.GetByID(ctx, id, userID); err != nil {
+	plan, err := s.GetByID(ctx, id, userID)
+	if err != nil {
 		return ProgressRecord{}, err
 	}
+	in = clampProgress(plan.Progress, in)
 	progressJSON, err := marshalProgress(in)
 	if err != nil {
 		return ProgressRecord{}, apperror.New("VALIDATION_ERROR", 422, "invalid progress")
@@ -181,6 +193,25 @@ func (s *Service) SaveProgress(ctx context.Context, id, userID uuid.UUID, in Pro
 		return ProgressRecord{}, err
 	}
 	return mapProgress(row.Progress)
+}
+
+// clampProgress bounds the client-supplied progress values against the
+// previously persisted state: totalXp/longestStreak may never regress, and
+// may never move forward by more than a plausible amount in one call.
+func clampProgress(prev, in ProgressRecord) ProgressRecord {
+	if in.TotalXp < prev.TotalXp {
+		in.TotalXp = prev.TotalXp
+	} else if in.TotalXp > prev.TotalXp+maxXpPerSave {
+		in.TotalXp = prev.TotalXp + maxXpPerSave
+	}
+
+	if in.LongestStreak < prev.LongestStreak {
+		in.LongestStreak = prev.LongestStreak
+	} else if in.LongestStreak > prev.LongestStreak+maxStreakIncrementPerSave {
+		in.LongestStreak = prev.LongestStreak + maxStreakIncrementPerSave
+	}
+
+	return in
 }
 
 func marshalSteps(steps []Step) ([]byte, error) {
