@@ -17,6 +17,11 @@
 
 ---
 
+<p align="center">
+  <img src="docs/assets/screenshot-decks.png" alt="OpenFlashcards deck dashboard" width="49%" />
+  <img src="docs/assets/screenshot-study.png" alt="OpenFlashcards study session" width="49%" />
+</p>
+
 ## Why OpenFlashcards?
 
 - 🧠 **FSRS scheduler** — the modern spaced-repetition algorithm (same family Anki adopted), not SM-2
@@ -78,6 +83,23 @@ All configuration lives in `.env` — see [.env.example](.env.example) for the f
 ## Deployment
 
 Docker Compose behind any reverse proxy with TLS. For production: set `ENVIRONMENT=production`, `LOG_LEVEL=info`, a strong random `JWT_SECRET`, and `CORS_ALLOWED_ORIGINS` to your domain.
+
+### Run from prebuilt images
+
+Skip building locally — pull the images published to GHCR on every tagged release:
+
+```bash
+cp .env.example .env   # set JWT_SECRET and POSTGRES_PASSWORD
+docker compose -f docker-compose.ghcr.yaml up -d
+```
+
+Pin a specific version instead of `latest`:
+
+```bash
+IMAGE_TAG=0.1.0 docker compose -f docker-compose.ghcr.yaml up -d
+```
+
+Images: [`ghcr.io/heliofernandes404/openflashcards-api`](https://github.com/HelioFernandes404/openflashcards/pkgs/container/openflashcards-api) and [`ghcr.io/heliofernandes404/openflashcards-web`](https://github.com/HelioFernandes404/openflashcards/pkgs/container/openflashcards-web).
 
 ## Contributing
 

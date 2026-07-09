@@ -53,3 +53,8 @@ jobs:
 
       - name: Test
         run: npm run test:unit
+
+      # Vite dev and Vitest don't type-check; only the production build runs
+      # tsc, so build here to catch type errors before they reach a release.
+      - name: Build
+        run: npm run build
