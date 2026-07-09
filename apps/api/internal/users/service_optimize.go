@@ -3,7 +3,6 @@ package users
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/apperror"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/fsrs/optimize"
@@ -164,42 +163,4 @@ func (s *Service) setOptimizationStatus(ctx context.Context, userID uuid.UUID, s
 	}); err != nil {
 		return
 	}
-}
-
-func makeReviewRows(n int) []optimize.ReviewRow {
-	cardID := uuid.New()
-	now := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	rows := make([]optimize.ReviewRow, 0, n)
-	for i := 0; i < n; i++ {
-		rows = append(rows, optimize.ReviewRow{
-			CardID:         cardID,
-			Rating:         3,
-			ReviewDatetime: now.Add(time.Duration(i) * 24 * time.Hour),
-		})
-	}
-	return rows
-}
-
-type fakeOptimizerRunner struct {
-	result optimize.Result
-	err    error
-}
-
-func (f fakeOptimizerRunner) Run(_ context.Context, _ optimize.Input) (optimize.Result, error) {
-	if f.err != nil {
-		return optimize.Result{}, f.err
-	}
-	return f.result, nil
-}
-
-type fakeReviewLister struct {
-	rows []optimize.ReviewRow
-	err  error
-}
-
-func (f fakeReviewLister) listReviewsForOptimizer(_ context.Context, _ uuid.UUID) ([]optimize.ReviewRow, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return f.rows, nil
 }
