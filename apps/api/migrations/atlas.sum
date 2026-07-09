@@ -1,4 +1,4 @@
-h1:nDucNljRsXtykK3JPFnk3dOG4YII3HaXOQH6pvqNq8E=
+h1:Rm0p6hz7nmz5oJ/aUr4uhHn2HXxxc6nn6H3fF3XrT2I=
 20260529000001_initial_schema.sql h1:CjNkaKEbZAAmo0RQISL+syEws0/7AKIuzyfwpo4frpg=
 20260613000001_add_media.sql h1:3U9sst8w+0mCEBVXqpHyCIknOsDhBvL14wvuDKV7nak=
 20260619000001_add_modules.sql h1:YQmF4o/whfZPLikxdNOsCuf430D2gzO5W7qiSPGzylM=
@@ -14,3 +14,4 @@ h1:nDucNljRsXtykK3JPFnk3dOG4YII3HaXOQH6pvqNq8E=
 20260705000001_add_perf_indexes.sql h1:5PUYnuuvOGg3md/0dJw/0UD8YYa6XePCMUpMs1kZ/QE=
 20260705000002_add_prompt_templates.sql h1:POOqSxCWsHqNF5gj0J1d7Ugft+RXrp9rowsMUMUy8f4=
 20260707000001_remove_card_field_length_limit.sql h1:FjRTF8q7lmoUr5ynAUgnP4oj4ygZdbWDP2P0IFegFVY=
+20260709000001_normalize_user_email_case.sql h1:oLbJADNiTXfJGh3N4QW4XywLcgnH5KdKZg48709cDr4=

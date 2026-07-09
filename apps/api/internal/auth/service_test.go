@@ -299,3 +299,50 @@ func TestLogoutAllLeavesOtherUsersSessionsIntact(t *testing.T) {
 		t.Errorf("expected bob's session to survive alice's LogoutAll, got %v", err)
 	}
 }
+
+func TestRegisterNormalizesEmailToLowercase(t *testing.T) {
+	svc := newTestService()
+	u, _, err := svc.Register(context.Background(), RegisterInput{
+		Email: "  Foo@EXAMPLE.com  ", Nickname: "foo", Password: "supersecretpass",
+	}, "")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if u.Email != "foo@example.com" {
+		t.Errorf("Email: got %q, want normalized %q", u.Email, "foo@example.com")
+	}
+}
+
+func TestRegisterRejectsDuplicateEmailDifferingOnlyByCase(t *testing.T) {
+	svc := newTestService()
+	_, _, err := svc.Register(context.Background(), RegisterInput{
+		Email: "a@b.com", Nickname: "ab", Password: "supersecretpass",
+	}, "")
+	if err != nil {
+		t.Fatalf("first Register: %v", err)
+	}
+	_, _, err = svc.Register(context.Background(), RegisterInput{
+		Email: "A@B.com", Nickname: "ab2", Password: "supersecretpass",
+	}, "")
+	if err != apperror.ErrUserAlreadyExists {
+		t.Errorf("expected ErrUserAlreadyExists for an email differing only by case, got %v", err)
+	}
+}
+
+func TestLoginIsCaseInsensitiveOnEmail(t *testing.T) {
+	svc := newTestService()
+	_, _, err := svc.Register(context.Background(), RegisterInput{
+		Email: "foo@example.com", Nickname: "foo", Password: "supersecretpass",
+	}, "")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	tok, err := svc.Login(context.Background(), "  FOO@Example.COM  ", "supersecretpass", "")
+	if err != nil {
+		t.Fatalf("expected Login to succeed with a differently-cased/whitespace-padded email, got %v", err)
+	}
+	if tok.AccessToken == "" {
+		t.Error("expected non-empty access token")
+	}
+}

@@ -3,11 +3,18 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/apperror"
 	"github.com/google/uuid"
 )
+
+// normalizeEmail matches the DB-level LOWER(email) unique index, so the same
+// mailbox can't register twice under different casing/whitespace.
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
 
 type User struct {
 	ID                 uuid.UUID
@@ -111,7 +118,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput, deviceInfo str
 		name = &in.Name
 	}
 	u, err := s.repo.CreateUser(ctx, CreateUserParams{
-		Email:            in.Email,
+		Email:            normalizeEmail(in.Email),
 		Nickname:         in.Nickname,
 		Name:             name,
 		HashedPassword:   hash,
@@ -129,7 +136,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput, deviceInfo str
 }
 
 func (s *Service) Login(ctx context.Context, email, password, deviceInfo string) (TokenPair, error) {
-	u, err := s.repo.GetUserByEmail(ctx, email)
+	u, err := s.repo.GetUserByEmail(ctx, normalizeEmail(email))
 	if err != nil {
 		if errors.Is(err, apperror.ErrUserNotFound) {
 			return TokenPair{}, apperror.ErrInvalidCredentials
