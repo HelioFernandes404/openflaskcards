@@ -42,6 +42,15 @@ SET optimization_status = $2,
 WHERE id = $1
 RETURNING *;
 
+-- name: ClaimOptimizationRun :one
+-- Atomic "claim": only succeeds if the user isn't already marked as
+-- running, avoiding the race between checking and setting the status
+-- across concurrent requests/replicas.
+UPDATE users
+SET optimization_status = 'running', updated_at = NOW()
+WHERE id = $1 AND optimization_status IS DISTINCT FROM 'running'
+RETURNING id;
+
 -- name: ResetStaleRunningOptimizations :exec
 -- Run once at startup: the in-memory "running" guard is lost on restart, so
 -- any row still marked 'running' is orphaned from a crash mid-optimization.

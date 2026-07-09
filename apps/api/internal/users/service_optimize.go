@@ -84,21 +84,21 @@ func (s *Service) StartOptimizeFSRS(ctx context.Context, userID uuid.UUID) (stri
 		}
 		return "", err
 	}
-	if u.OptimizationStatus != nil && *u.OptimizationStatus == optimize.StatusRunning {
-		return "", apperror.New("OPTIMIZATION_RUNNING", http.StatusConflict, "optimization already running")
-	}
-	if !s.markRunning(userID) {
-		return "", apperror.New("OPTIMIZATION_RUNNING", http.StatusConflict, "optimization already running")
-	}
 
-	status := optimize.StatusRunning
-	if _, err := s.r.updateOptimizationStatus(ctx, db.UpdateUserOptimizationStatusParams{
-		ID:                 userID,
-		OptimizationStatus: &status,
-	}); err != nil {
-		s.clearRunning(userID)
+	// The atomic claim in the database is the source of truth: it flips
+	// optimization_status to "running" iff it isn't already "running" in a
+	// single statement, so there's no read-then-write window and it holds
+	// across API replicas (not just within one process).
+	if _, err := s.r.claimOptimizationRun(ctx, userID); err != nil {
+		if err == pgx.ErrNoRows {
+			return "", apperror.New("OPTIMIZATION_RUNNING", http.StatusConflict, "optimization already running")
+		}
 		return "", err
 	}
+
+	// The in-memory map is now only a local fast-path optimization (e.g. for
+	// clearRunning bookkeeping within this process) — never the guard itself.
+	s.markRunning(userID)
 
 	desiredRetention := u.DesiredRetention
 	s.jobs.Add(1)

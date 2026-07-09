@@ -12,6 +12,10 @@ import (
 
 type Querier interface {
 	BrowseUserCards(ctx context.Context, arg BrowseUserCardsParams) ([]Card, error)
+	// Atomic "claim": only succeeds if the user isn't already marked as
+	// running, avoiding the race between checking and setting the status
+	// across concurrent requests/replicas.
+	ClaimOptimizationRun(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	CountCardsByDeck(ctx context.Context, deckID uuid.UUID) (int64, error)
 	CountCardsReferencingMediaURL(ctx context.Context, imagemUrl *string) (int64, error)
 	CountDueCardsByDeck(ctx context.Context, arg CountDueCardsByDeckParams) (int64, error)

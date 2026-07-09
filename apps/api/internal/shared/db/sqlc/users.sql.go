@@ -12,6 +12,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const claimOptimizationRun = `-- name: ClaimOptimizationRun :one
+UPDATE users
+SET optimization_status = 'running', updated_at = NOW()
+WHERE id = $1 AND optimization_status IS DISTINCT FROM 'running'
+RETURNING id
+`
+
+// Atomic "claim": only succeeds if the user isn't already marked as
+// running, avoiding the race between checking and setting the status
+// across concurrent requests/replicas.
+func (q *Queries) ClaimOptimizationRun(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, claimOptimizationRun, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, nickname, name, hashed_password, fsrs_parameters, desired_retention)
 VALUES ($1, $2, $3, $4, $5, $6)

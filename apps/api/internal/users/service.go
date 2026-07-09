@@ -22,6 +22,11 @@ type repo interface {
 	updateOptimizationStatus(ctx context.Context, arg db.UpdateUserOptimizationStatusParams) (db.User, error)
 	updateFSRSAfterOptimization(ctx context.Context, arg db.UpdateUserFSRSAfterOptimizationParams) (db.User, error)
 	resetStaleRunningOptimizations(ctx context.Context) error
+	// claimOptimizationRun atomically flips optimization_status to "running"
+	// iff it isn't already "running", returning pgx.ErrNoRows when someone
+	// else already holds the claim. This is the source of truth for
+	// concurrency control — the in-memory map is only a local optimization.
+	claimOptimizationRun(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 }
 
 type pgRepo struct{ q *db.Queries }
@@ -43,6 +48,9 @@ func (r *pgRepo) updateFSRSAfterOptimization(ctx context.Context, arg db.UpdateU
 }
 func (r *pgRepo) resetStaleRunningOptimizations(ctx context.Context) error {
 	return r.q.ResetStaleRunningOptimizations(ctx)
+}
+func (r *pgRepo) claimOptimizationRun(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	return r.q.ClaimOptimizationRun(ctx, id)
 }
 
 type Service struct {

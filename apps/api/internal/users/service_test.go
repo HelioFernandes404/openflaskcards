@@ -88,6 +88,22 @@ func (f *fakeRepo) updateOptimizationStatus(_ context.Context, arg db.UpdateUser
 	return u, nil
 }
 
+func (f *fakeRepo) claimOptimizationRun(_ context.Context, id uuid.UUID) (uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	u, ok := f.users[id]
+	if !ok {
+		return uuid.UUID{}, pgx.ErrNoRows
+	}
+	if u.OptimizationStatus != nil && *u.OptimizationStatus == "running" {
+		return uuid.UUID{}, pgx.ErrNoRows
+	}
+	running := "running"
+	u.OptimizationStatus = &running
+	f.users[id] = u
+	return id, nil
+}
+
 func (f *fakeRepo) resetStaleRunningOptimizations(_ context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
