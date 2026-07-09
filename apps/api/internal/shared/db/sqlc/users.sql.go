@@ -178,19 +178,24 @@ SET email = COALESCE($2, email),
         WHEN $6::boolean THEN $7
         ELSE timezone
     END,
+    is_email_verified = CASE
+        WHEN $8::boolean THEN false
+        ELSE is_email_verified
+    END,
     updated_at = NOW()
 WHERE id = $1
 RETURNING id, email, nickname, name, hashed_password, is_email_verified, provider, providers, fsrs_parameters, desired_retention, optimization_status, last_optimization, timezone, created_at, updated_at
 `
 
 type UpdateUserParams struct {
-	ID             uuid.UUID `json:"id"`
-	Email          *string   `json:"email"`
-	Nickname       *string   `json:"nickname"`
-	Name           *string   `json:"name"`
-	HashedPassword *string   `json:"hashed_password"`
-	TimezoneSet    *bool     `json:"timezone_set"`
-	Timezone       *string   `json:"timezone"`
+	ID                 uuid.UUID `json:"id"`
+	Email              *string   `json:"email"`
+	Nickname           *string   `json:"nickname"`
+	Name               *string   `json:"name"`
+	HashedPassword     *string   `json:"hashed_password"`
+	TimezoneSet        *bool     `json:"timezone_set"`
+	Timezone           *string   `json:"timezone"`
+	ResetEmailVerified *bool     `json:"reset_email_verified"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
@@ -202,6 +207,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.HashedPassword,
 		arg.TimezoneSet,
 		arg.Timezone,
+		arg.ResetEmailVerified,
 	)
 	var i User
 	err := row.Scan(

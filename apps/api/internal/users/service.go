@@ -165,8 +165,9 @@ func (s *Service) UpdateFSRS(ctx context.Context, id uuid.UUID, in UpdateFSRSInp
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (User, error) {
+	var resetEmailVerified bool
 	// Note: password hashing handled by caller via auth package if Password set
-	if in.Password != nil {
+	if in.Password != nil || in.Email != nil {
 		current, err := s.r.getByID(ctx, id)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -174,24 +175,32 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (Use
 			}
 			return User{}, err
 		}
-		// Accounts with a local password must confirm it before changing it,
-		// so a stolen access token alone can't lock the owner out. Accounts
-		// without one (OAuth) are setting their first password.
-		if current.HashedPassword != nil && *current.HashedPassword != "" {
-			if in.CurrentPassword == nil ||
-				!auth.VerifyPassword(*current.HashedPassword, *in.CurrentPassword) {
-				return User{}, apperror.ErrInvalidCredentials
+		if in.Password != nil {
+			// Accounts with a local password must confirm it before changing it,
+			// so a stolen access token alone can't lock the owner out. Accounts
+			// without one (OAuth) are setting their first password.
+			if current.HashedPassword != nil && *current.HashedPassword != "" {
+				if in.CurrentPassword == nil ||
+					!auth.VerifyPassword(*current.HashedPassword, *in.CurrentPassword) {
+					return User{}, apperror.ErrInvalidCredentials
+				}
 			}
+		}
+		// Pointing the account at a different address invalidates the prior
+		// verification: nothing confirms the user actually owns the new one.
+		if in.Email != nil {
+			resetEmailVerified = *in.Email != current.Email
 		}
 	}
 	row, err := s.r.update(ctx, db.UpdateUserParams{
-		ID:             id,
-		Email:          in.Email,
-		Nickname:       in.Nickname,
-		Name:           in.Name,
-		HashedPassword: in.Password,
-		Timezone:       in.Timezone,
-		TimezoneSet:    &in.TimezoneSet,
+		ID:                 id,
+		Email:              in.Email,
+		Nickname:           in.Nickname,
+		Name:               in.Name,
+		HashedPassword:     in.Password,
+		Timezone:           in.Timezone,
+		TimezoneSet:        &in.TimezoneSet,
+		ResetEmailVerified: &resetEmailVerified,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

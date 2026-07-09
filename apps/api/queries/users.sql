@@ -22,6 +22,10 @@ SET email = COALESCE(sqlc.narg('email'), email),
         WHEN sqlc.narg('timezone_set')::boolean THEN sqlc.narg('timezone')
         ELSE timezone
     END,
+    is_email_verified = CASE
+        WHEN sqlc.narg('reset_email_verified')::boolean THEN false
+        ELSE is_email_verified
+    END,
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;

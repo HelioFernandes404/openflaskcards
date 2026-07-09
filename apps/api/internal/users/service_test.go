@@ -55,6 +55,9 @@ func (f *fakeRepo) update(_ context.Context, arg db.UpdateUserParams) (db.User, 
 	if arg.TimezoneSet != nil && *arg.TimezoneSet {
 		u.Timezone = arg.Timezone
 	}
+	if arg.ResetEmailVerified != nil && *arg.ResetEmailVerified {
+		u.IsEmailVerified = false
+	}
 	f.users[arg.ID] = u
 	return u, nil
 }
@@ -274,6 +277,57 @@ func TestUpdateOmittedTimezoneKeepsExisting(t *testing.T) {
 	}
 	if got.Timezone == nil || *got.Timezone != tz {
 		t.Errorf("expected timezone to be preserved when not sent, got %v", got.Timezone)
+	}
+}
+
+func TestUpdateEmailChangeResetsIsEmailVerified(t *testing.T) {
+	svc, r := newTestService()
+	u := seedUser(r)
+	u.IsEmailVerified = true
+	r.users[u.ID] = u
+
+	newEmail := "new-address@example.com"
+	got, err := svc.Update(context.Background(), u.ID, UpdateInput{Email: &newEmail})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.Email != newEmail {
+		t.Fatalf("Email: got %q, want %q", got.Email, newEmail)
+	}
+	if got.IsEmailVerified {
+		t.Error("expected IsEmailVerified to be reset to false after changing to a new email")
+	}
+}
+
+func TestUpdateSameEmailKeepsIsEmailVerified(t *testing.T) {
+	svc, r := newTestService()
+	u := seedUser(r)
+	u.IsEmailVerified = true
+	r.users[u.ID] = u
+
+	sameEmail := u.Email
+	got, err := svc.Update(context.Background(), u.ID, UpdateInput{Email: &sameEmail})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !got.IsEmailVerified {
+		t.Error("expected IsEmailVerified to stay true when the email is resent unchanged")
+	}
+}
+
+func TestUpdateOmittedEmailKeepsIsEmailVerified(t *testing.T) {
+	svc, r := newTestService()
+	u := seedUser(r)
+	u.IsEmailVerified = true
+	r.users[u.ID] = u
+
+	name := "New Name"
+	got, err := svc.Update(context.Background(), u.ID, UpdateInput{Name: &name})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !got.IsEmailVerified {
+		t.Error("expected IsEmailVerified to stay true when email is not part of the update")
 	}
 }
 
