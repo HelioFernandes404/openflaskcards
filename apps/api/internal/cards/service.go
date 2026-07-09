@@ -15,12 +15,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// mediaOwnerChecker resolves a media URL (as issued by the media package,
+// e.g. "/api/v1/media/<id>") back to its owner, so cards can reject
+// audioUrl/imagemUrl values that don't belong to the requesting user. ok is
+// false when the URL isn't a valid/existing media reference.
+type mediaOwnerChecker interface {
+	OwnerOfURL(ctx context.Context, url string) (userID uuid.UUID, ok bool, err error)
+}
+
 type Service struct {
-	pool *pgxpool.Pool
-	q    *db.Queries
-	fsrs *fsrs.Scheduler
-	tts  *tts.Service
-	log  *zap.Logger
+	pool  *pgxpool.Pool
+	q     *db.Queries
+	fsrs  *fsrs.Scheduler
+	tts   *tts.Service
+	log   *zap.Logger
+	media mediaOwnerChecker
 }
 
 func NewService(pool *pgxpool.Pool, scheduler *fsrs.Scheduler, ttsSvc *tts.Service, opts ...ServiceOption) *Service {
@@ -37,6 +46,32 @@ type ServiceOption func(*Service)
 // FSRS scheduler fallbacks in production logs.
 func WithLogger(log *zap.Logger) ServiceOption {
 	return func(s *Service) { s.log = log }
+}
+
+// WithMediaOwnerChecker wires in ownership validation for audioUrl/imagemUrl
+// on Create/Update. Without it (e.g. in tests), those fields are accepted
+// unchecked.
+func WithMediaOwnerChecker(m mediaOwnerChecker) ServiceOption {
+	return func(s *Service) { s.media = m }
+}
+
+// validateMediaOwnership rejects a client-submitted audioUrl/imagemUrl that
+// doesn't resolve to media owned by userID. This closes the gap where a
+// user could point a card at another user's media URL, which the global
+// (not owner-scoped) "media in use" check on delete would then treat as a
+// permanent block on the true owner deleting their own media.
+func (s *Service) validateMediaOwnership(ctx context.Context, userID uuid.UUID, url *string) error {
+	if url == nil || s.media == nil {
+		return nil
+	}
+	ownerID, ok, err := s.media.OwnerOfURL(ctx, *url)
+	if err != nil {
+		return err
+	}
+	if !ok || ownerID != userID {
+		return apperror.ErrMediaNotFound
+	}
+	return nil
 }
 
 type CreateInput struct {
@@ -60,6 +95,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Card, error) {
 	}
 	if deck.UserID != in.UserID {
 		return Card{}, apperror.ErrDeckNotFound
+	}
+	if err := s.validateMediaOwnership(ctx, in.UserID, in.AudioURL); err != nil {
+		return Card{}, err
+	}
+	if err := s.validateMediaOwnership(ctx, in.UserID, in.ImagemURL); err != nil {
+		return Card{}, err
 	}
 	newCard := s.fsrs.NewCard()
 	cardJSON, err := s.fsrs.MarshalCard(newCard)
@@ -170,6 +211,12 @@ type UpdateInput struct {
 
 func (s *Service) Update(ctx context.Context, id, userID uuid.UUID, in UpdateInput) (Card, error) {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
+		return Card{}, err
+	}
+	if err := s.validateMediaOwnership(ctx, userID, in.AudioURL); err != nil {
+		return Card{}, err
+	}
+	if err := s.validateMediaOwnership(ctx, userID, in.ImagemURL); err != nil {
 		return Card{}, err
 	}
 	row, err := s.q.UpdateCard(ctx, db.UpdateCardParams{

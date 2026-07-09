@@ -131,8 +131,8 @@ func run() error {
 	lettersSvc := letters.NewService(pool)
 	studyPlansSvc := studyplans.NewService(pool)
 	kanbanSvc := kanban.NewService(pool)
-	cardsSvc := cards.NewService(pool, scheduler, ttsSvc, cards.WithLogger(log))
 	mediaSvc := media.NewService(media.NewRepository(pool), cfg.MediaDir, cfg.MediaMaxImageBytes)
+	cardsSvc := cards.NewService(pool, scheduler, ttsSvc, cards.WithLogger(log), cards.WithMediaOwnerChecker(mediaSvc))
 
 	authH := auth.NewHandler(authSvc)
 	usersH := users.NewHandler(usersSvc, authSvc, jwtMgr)

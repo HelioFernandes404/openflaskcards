@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/apperror"
 	"github.com/google/uuid"
@@ -138,4 +139,28 @@ func (s *Service) Delete(ctx context.Context, id, userID uuid.UUID) error {
 
 func (s *Service) absPath(m Media) string {
 	return filepath.Join(s.mediaDir, m.StoragePath)
+}
+
+// OwnerOfURL resolves a previously issued Media.URL() back to the user that
+// owns it, so other features (e.g. cards) can verify a client-submitted
+// audioUrl/imagemUrl actually belongs to the requesting user before storing
+// it. ok is false when url isn't a valid media URL or the media doesn't
+// exist — callers should treat that the same as "not owned by this user".
+func (s *Service) OwnerOfURL(ctx context.Context, url string) (userID uuid.UUID, ok bool, err error) {
+	idStr, found := strings.CutPrefix(url, urlPrefix)
+	if !found {
+		return uuid.UUID{}, false, nil
+	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return uuid.UUID{}, false, nil
+	}
+	m, err := s.repo.GetMediaByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, apperror.ErrMediaNotFound) {
+			return uuid.UUID{}, false, nil
+		}
+		return uuid.UUID{}, false, err
+	}
+	return m.UserID, true, nil
 }
