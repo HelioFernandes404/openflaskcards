@@ -103,17 +103,29 @@ func (q *Queries) CountCardsByDeck(ctx context.Context, deckID uuid.UUID) (int64
 }
 
 const countDueCardsByDeck = `-- name: CountDueCardsByDeck :one
-SELECT COUNT(*)::bigint FROM cards
-WHERE deck_id = $1 AND due <= $2
+WITH ranked AS (
+    SELECT state,
+        CASE
+            WHEN state = 'new' THEN ROW_NUMBER() OVER (PARTITION BY (state = 'new') ORDER BY due ASC)
+            ELSE 0
+        END AS new_rank
+    FROM cards
+    WHERE deck_id = $1 AND due <= $2
+)
+SELECT COUNT(*)::bigint FROM ranked
+WHERE state != 'new' OR new_rank <= $3::bigint
 `
 
 type CountDueCardsByDeckParams struct {
-	DeckID uuid.UUID `json:"deck_id"`
-	Due    time.Time `json:"due"`
+	DeckID      uuid.UUID `json:"deck_id"`
+	Due         time.Time `json:"due"`
+	MaxNewCards int64     `json:"max_new_cards"`
 }
 
+// Mirrors the new-card cap applied in ListDueCardsByDeck so TotalDue
+// matches what pagination can actually return.
 func (q *Queries) CountDueCardsByDeck(ctx context.Context, arg CountDueCardsByDeckParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countDueCardsByDeck, arg.DeckID, arg.Due)
+	row := q.db.QueryRow(ctx, countDueCardsByDeck, arg.DeckID, arg.Due, arg.MaxNewCards)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -534,33 +546,71 @@ func (q *Queries) ListCardsByDeck(ctx context.Context, deckID uuid.UUID) ([]Card
 }
 
 const listDueCardsByDeck = `-- name: ListDueCardsByDeck :many
-SELECT id, deck_id, front, back, audio_url, imagem_url, fonetica, tts_enabled, stability, difficulty, due, last_review, state, reps, lapses, fsrs_card_json, row_version, created_at, updated_at FROM cards
-WHERE deck_id = $1 AND due <= $2
+WITH ranked AS (
+    SELECT id, deck_id, front, back, audio_url, imagem_url, fonetica, tts_enabled, stability, difficulty, due, last_review, state, reps, lapses, fsrs_card_json, row_version, created_at, updated_at,
+        CASE
+            WHEN state = 'new' THEN ROW_NUMBER() OVER (PARTITION BY (state = 'new') ORDER BY due ASC)
+            ELSE 0
+        END AS new_rank
+    FROM cards
+    WHERE deck_id = $1 AND due <= $2
+)
+SELECT id, deck_id, front, back, audio_url, imagem_url, fonetica, tts_enabled, stability, difficulty, due, last_review, state, reps, lapses, fsrs_card_json, row_version, created_at, updated_at
+FROM ranked
+WHERE state != 'new' OR new_rank <= $5::bigint
 ORDER BY due ASC
 LIMIT $3 OFFSET $4
 `
 
 type ListDueCardsByDeckParams struct {
-	DeckID uuid.UUID `json:"deck_id"`
-	Due    time.Time `json:"due"`
-	Limit  int32     `json:"limit"`
-	Offset int32     `json:"offset"`
+	DeckID      uuid.UUID `json:"deck_id"`
+	Due         time.Time `json:"due"`
+	Limit       int32     `json:"limit"`
+	Offset      int32     `json:"offset"`
+	MaxNewCards int64     `json:"max_new_cards"`
 }
 
-func (q *Queries) ListDueCardsByDeck(ctx context.Context, arg ListDueCardsByDeckParams) ([]Card, error) {
+type ListDueCardsByDeckRow struct {
+	ID           uuid.UUID  `json:"id"`
+	DeckID       uuid.UUID  `json:"deck_id"`
+	Front        string     `json:"front"`
+	Back         string     `json:"back"`
+	AudioUrl     *string    `json:"audio_url"`
+	ImagemUrl    *string    `json:"imagem_url"`
+	Fonetica     *string    `json:"fonetica"`
+	TtsEnabled   bool       `json:"tts_enabled"`
+	Stability    float64    `json:"stability"`
+	Difficulty   float64    `json:"difficulty"`
+	Due          time.Time  `json:"due"`
+	LastReview   *time.Time `json:"last_review"`
+	State        string     `json:"state"`
+	Reps         int32      `json:"reps"`
+	Lapses       int32      `json:"lapses"`
+	FsrsCardJson *string    `json:"fsrs_card_json"`
+	RowVersion   int32      `json:"row_version"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// Ranks 'new' cards by due date and drops any beyond sqlc.arg(max_new_cards)
+// BEFORE applying LIMIT/OFFSET, so pagination reflects exactly what the
+// caller is allowed to consume (see CountDueCardsByDeck for the matching
+// total). Non-new cards are never capped by this rank.
+func (q *Queries) ListDueCardsByDeck(ctx context.Context, arg ListDueCardsByDeckParams) ([]ListDueCardsByDeckRow, error) {
 	rows, err := q.db.Query(ctx, listDueCardsByDeck,
 		arg.DeckID,
 		arg.Due,
 		arg.Limit,
 		arg.Offset,
+		arg.MaxNewCards,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Card
+	var items []ListDueCardsByDeckRow
 	for rows.Next() {
-		var i Card
+		var i ListDueCardsByDeckRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.DeckID,

@@ -13,14 +13,39 @@ SELECT * FROM cards WHERE id = $1;
 SELECT * FROM cards WHERE deck_id = $1 ORDER BY created_at DESC;
 
 -- name: ListDueCardsByDeck :many
-SELECT * FROM cards
-WHERE deck_id = $1 AND due <= $2
+-- Ranks 'new' cards by due date and drops any beyond sqlc.arg(max_new_cards)
+-- BEFORE applying LIMIT/OFFSET, so pagination reflects exactly what the
+-- caller is allowed to consume (see CountDueCardsByDeck for the matching
+-- total). Non-new cards are never capped by this rank.
+WITH ranked AS (
+    SELECT *,
+        CASE
+            WHEN state = 'new' THEN ROW_NUMBER() OVER (PARTITION BY (state = 'new') ORDER BY due ASC)
+            ELSE 0
+        END AS new_rank
+    FROM cards
+    WHERE deck_id = $1 AND due <= $2
+)
+SELECT id, deck_id, front, back, audio_url, imagem_url, fonetica, tts_enabled, stability, difficulty, due, last_review, state, reps, lapses, fsrs_card_json, row_version, created_at, updated_at
+FROM ranked
+WHERE state != 'new' OR new_rank <= sqlc.arg(max_new_cards)::bigint
 ORDER BY due ASC
 LIMIT $3 OFFSET $4;
 
 -- name: CountDueCardsByDeck :one
-SELECT COUNT(*)::bigint FROM cards
-WHERE deck_id = $1 AND due <= $2;
+-- Mirrors the new-card cap applied in ListDueCardsByDeck so TotalDue
+-- matches what pagination can actually return.
+WITH ranked AS (
+    SELECT state,
+        CASE
+            WHEN state = 'new' THEN ROW_NUMBER() OVER (PARTITION BY (state = 'new') ORDER BY due ASC)
+            ELSE 0
+        END AS new_rank
+    FROM cards
+    WHERE deck_id = $1 AND due <= $2
+)
+SELECT COUNT(*)::bigint FROM ranked
+WHERE state != 'new' OR new_rank <= sqlc.arg(max_new_cards)::bigint;
 
 -- name: ListDueCardsByUser :many
 SELECT c.* FROM cards c

@@ -29,6 +29,30 @@ type Card struct {
 	UpdatedAt    time.Time
 }
 
+func mapDueCardRow(row db.ListDueCardsByDeckRow) Card {
+	return mapCard(db.Card{
+		ID:           row.ID,
+		DeckID:       row.DeckID,
+		Front:        row.Front,
+		Back:         row.Back,
+		AudioUrl:     row.AudioUrl,
+		ImagemUrl:    row.ImagemUrl,
+		Fonetica:     row.Fonetica,
+		TtsEnabled:   row.TtsEnabled,
+		State:        row.State,
+		Stability:    row.Stability,
+		Difficulty:   row.Difficulty,
+		Due:          row.Due,
+		LastReview:   row.LastReview,
+		Reps:         row.Reps,
+		Lapses:       row.Lapses,
+		FsrsCardJson: row.FsrsCardJson,
+		RowVersion:   row.RowVersion,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+	})
+}
+
 func mapCard(row db.Card) Card {
 	return Card{
 		ID:           row.ID,

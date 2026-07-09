@@ -182,22 +182,12 @@ func (s *Service) DueSummaryByDeck(ctx context.Context, deckID, userID uuid.UUID
 		limit = 200
 	}
 	now := time.Now().UTC()
-	rows, err := s.q.ListDueCardsByDeck(ctx, db.ListDueCardsByDeckParams{
-		DeckID: deckID, Due: now, Limit: limit, Offset: offset,
-	})
-	if err != nil {
-		return DueSummary{}, err
-	}
-	totalDue, err := s.q.CountDueCardsByDeck(ctx, db.CountDueCardsByDeckParams{
-		DeckID: deckID, Due: now,
-	})
-	if err != nil {
-		return DueSummary{}, err
-	}
-	cards := make([]Card, 0, len(rows))
-	for _, r := range rows {
-		cards = append(cards, mapCard(r))
-	}
+
+	// Compute the remaining new-card quota first so it can be pushed down
+	// into the SQL for both the page query and the total count, keeping
+	// pagination and TotalDue consistent (see cogcs#40 / this port's
+	// tracking issue: the cap used to be applied only to the already
+	// LIMIT/OFFSET-ed page, after the fact).
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	studied, err := s.q.CountNewCardsStudiedToday(ctx, db.CountNewCardsStudiedTodayParams{
 		DeckID: deckID, UserID: userID, ReviewDatetime: startOfDay,
@@ -210,10 +200,25 @@ func (s *Service) DueSummaryByDeck(ctx context.Context, deckID, userID uuid.UUID
 		remaining = 0
 	}
 
-	filtered := capNewCardsInDueList(cards, remaining)
+	rows, err := s.q.ListDueCardsByDeck(ctx, db.ListDueCardsByDeckParams{
+		DeckID: deckID, Due: now, Limit: limit, Offset: offset, MaxNewCards: remaining,
+	})
+	if err != nil {
+		return DueSummary{}, err
+	}
+	totalDue, err := s.q.CountDueCardsByDeck(ctx, db.CountDueCardsByDeckParams{
+		DeckID: deckID, Due: now, MaxNewCards: remaining,
+	})
+	if err != nil {
+		return DueSummary{}, err
+	}
+	cards := make([]Card, 0, len(rows))
+	for _, r := range rows {
+		cards = append(cards, mapDueCardRow(r))
+	}
 
 	return DueSummary{
-		Cards:                  filtered,
+		Cards:                  cards,
 		TotalDue:               totalDue,
 		NewCardsDailyLimit:     deck.NewCardsDailyLimit,
 		NewCardsStudiedToday:   studied,

@@ -14,6 +14,8 @@ type Querier interface {
 	BrowseUserCards(ctx context.Context, arg BrowseUserCardsParams) ([]Card, error)
 	CountCardsByDeck(ctx context.Context, deckID uuid.UUID) (int64, error)
 	CountCardsReferencingMediaURL(ctx context.Context, imagemUrl *string) (int64, error)
+	// Mirrors the new-card cap applied in ListDueCardsByDeck so TotalDue
+	// matches what pagination can actually return.
 	CountDueCardsByDeck(ctx context.Context, arg CountDueCardsByDeckParams) (int64, error)
 	CountNewCardsStudiedToday(ctx context.Context, arg CountNewCardsStudiedTodayParams) (int64, error)
 	CountUserCards(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -72,7 +74,11 @@ type Querier interface {
 	GetUserByNickname(ctx context.Context, nickname string) (User, error)
 	ListCardsByDeck(ctx context.Context, deckID uuid.UUID) ([]Card, error)
 	ListDecksByUser(ctx context.Context, userID uuid.UUID) ([]Deck, error)
-	ListDueCardsByDeck(ctx context.Context, arg ListDueCardsByDeckParams) ([]Card, error)
+	// Ranks 'new' cards by due date and drops any beyond sqlc.arg(max_new_cards)
+	// BEFORE applying LIMIT/OFFSET, so pagination reflects exactly what the
+	// caller is allowed to consume (see CountDueCardsByDeck for the matching
+	// total). Non-new cards are never capped by this rank.
+	ListDueCardsByDeck(ctx context.Context, arg ListDueCardsByDeckParams) ([]ListDueCardsByDeckRow, error)
 	ListDueCardsByUser(ctx context.Context, arg ListDueCardsByUserParams) ([]Card, error)
 	ListKanbanCardsByUser(ctx context.Context, userID uuid.UUID) ([]KanbanCard, error)
 	ListKanbanCardsByUserAndStatus(ctx context.Context, arg ListKanbanCardsByUserAndStatusParams) ([]KanbanCard, error)
