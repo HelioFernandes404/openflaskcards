@@ -12,6 +12,7 @@ import (
 	db "github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -206,9 +207,27 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (Use
 		if errors.Is(err, pgx.ErrNoRows) {
 			return User{}, apperror.ErrUserNotFound
 		}
-		return User{}, err
+		return User{}, mapUpdateError(err)
 	}
 	return mapUser(row), nil
+}
+
+// mapUpdateError maps a unique-constraint violation on email/nickname to a
+// 409 conflict instead of falling through to a generic 500, mirroring the
+// pattern in internal/prompttemplates/service.go.
+func mapUpdateError(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+		return err
+	}
+	switch pgErr.ConstraintName {
+	case "ix_users_email":
+		return apperror.ErrEmailAlreadyInUse
+	case "ix_users_nickname":
+		return apperror.ErrNicknameAlreadyInUse
+	default:
+		return apperror.ErrEmailAlreadyInUse
+	}
 }
 
 func mapUser(row db.User) User {

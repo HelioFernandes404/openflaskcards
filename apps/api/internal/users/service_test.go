@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -9,14 +10,16 @@ import (
 	db "github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // fakeRepo simulates the users table. It is safe for concurrent use because
 // the optimize flow reads/writes it from a background goroutine while tests
 // poll it from the test goroutine.
 type fakeRepo struct {
-	mu    sync.Mutex
-	users map[uuid.UUID]db.User
+	mu        sync.Mutex
+	users     map[uuid.UUID]db.User
+	updateErr error
 }
 
 func newFakeRepo() *fakeRepo {
@@ -36,6 +39,9 @@ func (f *fakeRepo) getByID(_ context.Context, id uuid.UUID) (db.User, error) {
 func (f *fakeRepo) update(_ context.Context, arg db.UpdateUserParams) (db.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.updateErr != nil {
+		return db.User{}, f.updateErr
+	}
 	u, ok := f.users[arg.ID]
 	if !ok {
 		return db.User{}, pgx.ErrNoRows
@@ -328,6 +334,46 @@ func TestUpdateOmittedEmailKeepsIsEmailVerified(t *testing.T) {
 	}
 	if !got.IsEmailVerified {
 		t.Error("expected IsEmailVerified to stay true when email is not part of the update")
+	}
+}
+
+func TestUpdateReturnsConflictWhenEmailAlreadyInUse(t *testing.T) {
+	svc, r := newTestService()
+	u := seedUser(r)
+	r.updateErr = &pgconn.PgError{Code: "23505", ConstraintName: "ix_users_email"}
+
+	newEmail := "taken@example.com"
+	_, err := svc.Update(context.Background(), u.ID, UpdateInput{Email: &newEmail})
+
+	var appErr *apperror.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected an *apperror.AppError, got %v (%T)", err, err)
+	}
+	if appErr.Status != 409 {
+		t.Errorf("status: got %d, want 409", appErr.Status)
+	}
+	if appErr.Code != "EMAIL_ALREADY_IN_USE" {
+		t.Errorf("code: got %q, want EMAIL_ALREADY_IN_USE", appErr.Code)
+	}
+}
+
+func TestUpdateReturnsConflictWhenNicknameAlreadyInUse(t *testing.T) {
+	svc, r := newTestService()
+	u := seedUser(r)
+	r.updateErr = &pgconn.PgError{Code: "23505", ConstraintName: "ix_users_nickname"}
+
+	newNickname := "taken"
+	_, err := svc.Update(context.Background(), u.ID, UpdateInput{Nickname: &newNickname})
+
+	var appErr *apperror.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected an *apperror.AppError, got %v (%T)", err, err)
+	}
+	if appErr.Status != 409 {
+		t.Errorf("status: got %d, want 409", appErr.Status)
+	}
+	if appErr.Code != "NICKNAME_ALREADY_IN_USE" {
+		t.Errorf("code: got %q, want NICKNAME_ALREADY_IN_USE", appErr.Code)
 	}
 }
 
