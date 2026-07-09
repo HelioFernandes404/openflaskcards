@@ -72,17 +72,28 @@ export function LoginPage() {
           required
         />
 
-        <AuthField
-          id="password"
-          label="Password"
-          icon={Lock}
-          data-testid="login-password-input"
-          type="password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        <div>
+          <AuthField
+            id="password"
+            label="Password"
+            icon={Lock}
+            data-testid="login-password-input"
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <div className="mt-2 text-right">
+            <Link
+              to="/forgot-password"
+              data-testid="login-forgot-password-link"
+              className="text-xs text-on-surface-variant underline decoration-outline hover:decoration-on-surface"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        </div>
 
         <Button
           type="submit"

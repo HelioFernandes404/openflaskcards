@@ -40,6 +40,7 @@ type Querier interface {
 	CreateModule(ctx context.Context, arg CreateModuleParams) (Module, error)
 	// apps/api/queries/notes.sql
 	CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error)
+	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
 	// apps/api/queries/prompt_templates.sql
 	CreatePromptTemplate(ctx context.Context, arg CreatePromptTemplateParams) (PromptTemplate, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
@@ -51,6 +52,7 @@ type Querier interface {
 	DeleteAllRefreshTokensForUser(ctx context.Context, userID uuid.UUID) error
 	DeleteCard(ctx context.Context, arg DeleteCardParams) error
 	DeleteDeck(ctx context.Context, arg DeleteDeckParams) error
+	DeleteExpiredPasswordResetTokens(ctx context.Context) error
 	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteKanbanCard(ctx context.Context, arg DeleteKanbanCardParams) error
 	DeleteLetter(ctx context.Context, arg DeleteLetterParams) error
@@ -75,6 +77,7 @@ type Querier interface {
 	GetMediaByID(ctx context.Context, id uuid.UUID) (Medium, error)
 	GetModuleByID(ctx context.Context, id uuid.UUID) (Module, error)
 	GetNoteByID(ctx context.Context, id uuid.UUID) (Note, error)
+	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetPromptTemplateByID(ctx context.Context, id uuid.UUID) (PromptTemplate, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetStudyPlanByID(ctx context.Context, id uuid.UUID) (StudyPlan, error)
@@ -97,6 +100,7 @@ type Querier interface {
 	ListPromptTemplatesByUser(ctx context.Context, userID uuid.UUID) ([]PromptTemplate, error)
 	ListReviewsByUserForOptimizer(ctx context.Context, userID uuid.UUID) ([]ListReviewsByUserForOptimizerRow, error)
 	ListStudyPlansByUser(ctx context.Context, userID uuid.UUID) ([]StudyPlan, error)
+	MarkPasswordResetTokenUsed(ctx context.Context, id uuid.UUID) error
 	MaxPositionForStatus(ctx context.Context, arg MaxPositionForStatusParams) (int32, error)
 	MoveCard(ctx context.Context, arg MoveCardParams) (Card, error)
 	NextTodoCardForUser(ctx context.Context, userID uuid.UUID) (KanbanCard, error)
@@ -118,6 +122,9 @@ type Querier interface {
 	UpdateUserFSRS(ctx context.Context, arg UpdateUserFSRSParams) (User, error)
 	UpdateUserFSRSAfterOptimization(ctx context.Context, arg UpdateUserFSRSAfterOptimizationParams) (User, error)
 	UpdateUserOptimizationStatus(ctx context.Context, arg UpdateUserOptimizationStatusParams) (User, error)
+	// Used by the password reset flow (auth package) to set a new hashed
+	// password without touching any other user field.
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 
 var _ Querier = (*Queries)(nil)

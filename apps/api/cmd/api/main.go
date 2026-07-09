@@ -26,6 +26,7 @@ import (
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/fsrs"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/fsrs/optimize"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/logger"
+	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/mailer"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/middleware"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/tts"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/studyplans"
@@ -115,8 +116,18 @@ func run() error {
 	jwtMgr := auth.NewJWTManager([]byte(cfg.JWTSecret), time.Duration(cfg.AccessTokenTTLMinutes)*time.Minute)
 	scheduler := fsrs.New()
 
+	mailSender := mailer.NewSender(mailer.Config{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		From:     cfg.SMTPFrom,
+	}, log)
+
 	authRepo := auth.NewRepository(pool)
-	authSvc := auth.NewService(authRepo, jwtMgr, cfg.RefreshTokenTTLDays)
+	authSvc := auth.NewService(authRepo, jwtMgr, cfg.RefreshTokenTTLDays,
+		auth.WithPasswordReset(mailSender, cfg.WebBaseURL, time.Duration(cfg.PasswordResetTTLMinutes)*time.Minute),
+	)
 	usersSvc := users.NewService(pool, users.WithOptimizerRunner(optimize.Runner{
 		Binary:  cfg.FSRSOptimizerBin,
 		Timeout: 120 * time.Second,

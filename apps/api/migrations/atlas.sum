@@ -1,4 +1,4 @@
-h1:OIKnFpwUAyt8a+7iftHRTmHv4jQ9naG/oqNt5lZMdeE=
+h1:C/8JR7fjscU155fWiDV5qHriy08GV5W7fh7Z1JhqxXQ=
 20260529000001_initial_schema.sql h1:CjNkaKEbZAAmo0RQISL+syEws0/7AKIuzyfwpo4frpg=
 20260613000001_add_media.sql h1:3U9sst8w+0mCEBVXqpHyCIknOsDhBvL14wvuDKV7nak=
 20260619000001_add_modules.sql h1:YQmF4o/whfZPLikxdNOsCuf430D2gzO5W7qiSPGzylM=
@@ -16,3 +16,4 @@ h1:OIKnFpwUAyt8a+7iftHRTmHv4jQ9naG/oqNt5lZMdeE=
 20260707000001_remove_card_field_length_limit.sql h1:FjRTF8q7lmoUr5ynAUgnP4oj4ygZdbWDP2P0IFegFVY=
 20260709000001_normalize_user_email_case.sql h1:oLbJADNiTXfJGh3N4QW4XywLcgnH5KdKZg48709cDr4=
 20260709000002_add_reviews_was_new.sql h1:i8o6EO1OR2iKN3XnJVwNJuSaTLe0OCWjqywZxA1rXUY=
+20260709000003_add_password_reset_tokens.sql h1:0qDfCNeUUFBiBsgPG/XVLgDe0zhNdU0nsTHoUdFCxnk=

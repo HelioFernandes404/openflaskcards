@@ -27,6 +27,8 @@ func (h *Handler) RegisterRoutes(g *gin.RouterGroup, sensitiveMiddleware ...gin.
 	sensitive.POST("/register", h.register)
 	sensitive.POST("/login", h.login)
 	sensitive.POST("/refresh", h.refresh)
+	sensitive.POST("/forgot-password", h.forgotPassword)
+	sensitive.POST("/reset-password", h.resetPassword)
 	g.POST("/logout", h.logout)
 	g.POST("/logout-all", Middleware(h.svc.jwt), h.logoutAll)
 	g.GET("/me", Middleware(h.svc.jwt), h.me)
@@ -106,6 +108,46 @@ func (h *Handler) refresh(c *gin.Context) {
 		AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken,
 		TokenType: "bearer", ExpiresIn: tok.ExpiresIn,
 	})
+}
+
+type forgotPasswordReq struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// forgotPassword always responds 200 regardless of whether the email
+// belongs to an account, so this endpoint can't be used to enumerate
+// registered emails.
+func (h *Handler) forgotPassword(c *gin.Context) {
+	var req forgotPasswordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		WriteError(c, apperror.New("VALIDATION_ERROR", http.StatusUnprocessableEntity, err.Error()))
+		return
+	}
+	if err := h.svc.RequestPasswordReset(c.Request.Context(), req.Email); err != nil {
+		WriteError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "If an account exists for that email, a reset link has been sent.",
+	})
+}
+
+type resetPasswordReq struct {
+	Token    string `json:"token" binding:"required,min=1"`
+	Password string `json:"password" binding:"required,min=8"`
+}
+
+func (h *Handler) resetPassword(c *gin.Context) {
+	var req resetPasswordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		WriteError(c, apperror.New("VALIDATION_ERROR", http.StatusUnprocessableEntity, err.Error()))
+		return
+	}
+	if err := h.svc.ResetPassword(c.Request.Context(), req.Token, req.Password); err != nil {
+		WriteError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 type logoutReq struct {

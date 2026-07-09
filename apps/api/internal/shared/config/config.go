@@ -72,6 +72,20 @@ type Config struct {
 
 	// FSRS optimizer sidecar (fsrs-rs)
 	FSRSOptimizerBin string `envconfig:"FSRS_OPTIMIZER_BIN" default:"/app/openflaskcards-fsrs-optimize"`
+
+	// SMTP (password reset emails). Host empty means "not configured": the
+	// mailer falls back to logging instead of sending.
+	SMTPHost     string `envconfig:"SMTP_HOST" default:""`
+	SMTPPort     int    `envconfig:"SMTP_PORT" default:"587"`
+	SMTPUsername string `envconfig:"SMTP_USERNAME" default:""`
+	SMTPPassword string `envconfig:"SMTP_PASSWORD" default:""`
+	SMTPFrom     string `envconfig:"SMTP_FROM" default:""`
+
+	// WebBaseURL is used to build the password reset link sent by email.
+	WebBaseURL string `envconfig:"WEB_BASE_URL" default:"http://localhost:5173"`
+
+	// PasswordResetTTLMinutes bounds how long a password reset token stays valid.
+	PasswordResetTTLMinutes int `envconfig:"PASSWORD_RESET_TTL_MINUTES" default:"30"`
 }
 
 func Load() (*Config, error) {

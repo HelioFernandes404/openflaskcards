@@ -44,6 +44,31 @@ const registerRoute = createRoute({
   ),
 })
 
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  component: lazyRouteComponent(
+    () => import('@/features/auth/pages/ForgotPasswordPage'),
+    'ForgotPasswordPage',
+  ),
+})
+
+interface ResetPasswordSearch {
+  token?: string
+}
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  validateSearch: (search: Record<string, unknown>): ResetPasswordSearch => ({
+    token: typeof search.token === 'string' ? search.token : undefined,
+  }),
+  component: lazyRouteComponent(
+    () => import('@/features/auth/pages/ResetPasswordPage'),
+    'ResetPasswordPage',
+  ),
+})
+
 const protectedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'protected',
@@ -282,6 +307,8 @@ const catchAllRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   registerRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
   protectedRoute.addChildren([
     shellRoute.addChildren([
       dashboardRoute,

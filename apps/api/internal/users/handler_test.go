@@ -285,6 +285,18 @@ func (f *fakeAuthRepo) RedeemRefreshToken(_ context.Context, hash string) (auth.
 	delete(f.refreshTokensByHash, hash)
 	return rec, nil
 }
+func (f *fakeAuthRepo) CreatePasswordResetToken(_ context.Context, _ auth.CreatePasswordResetTokenParams) error {
+	return nil
+}
+func (f *fakeAuthRepo) GetPasswordResetTokenByHash(_ context.Context, _ string) (auth.PasswordResetTokenRecord, error) {
+	return auth.PasswordResetTokenRecord{}, apperror.ErrInvalidToken
+}
+func (f *fakeAuthRepo) MarkPasswordResetTokenUsed(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+func (f *fakeAuthRepo) UpdateUserPassword(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 
 // TestUpdateMePasswordChangeRevokesExistingSessions ensures a password change
 // through PATCH /users/me calls auth's LogoutAll, so a stolen refresh token

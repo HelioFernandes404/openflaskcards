@@ -84,6 +84,14 @@ export class AuthService {
     sessionStorage.setTokenExpiry(Date.now() + data.expires_in * 1000)
   }
 
+  async forgotPassword(email: string): Promise<void> {
+    await httpClient.post('/auth/forgot-password', { email })
+  }
+
+  async resetPassword(token: string, password: string): Promise<void> {
+    await httpClient.post('/auth/reset-password', { token, password })
+  }
+
   async getCurrentUser(): Promise<User> {
     const { data } = await httpClient.get<User>('/auth/me')
     sessionStorage.setUser(data)

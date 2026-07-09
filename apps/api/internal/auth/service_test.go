@@ -12,15 +12,17 @@ import (
 )
 
 type fakeRepo struct {
-	mu     sync.Mutex
-	users  map[string]User
-	tokens map[string]RefreshTokenRecord
+	mu          sync.Mutex
+	users       map[string]User
+	tokens      map[string]RefreshTokenRecord
+	resetTokens map[string]PasswordResetTokenRecord
 }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		users:  make(map[string]User),
-		tokens: make(map[string]RefreshTokenRecord),
+		users:       make(map[string]User),
+		tokens:      make(map[string]RefreshTokenRecord),
+		resetTokens: make(map[string]PasswordResetTokenRecord),
 	}
 }
 
@@ -75,6 +77,53 @@ func (f *fakeRepo) DeleteAllRefreshTokensForUser(_ context.Context, userID uuid.
 	for k, v := range f.tokens {
 		if v.UserID == userID {
 			delete(f.tokens, k)
+		}
+	}
+	return nil
+}
+
+func (f *fakeRepo) CreatePasswordResetToken(_ context.Context, p CreatePasswordResetTokenParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.resetTokens[p.TokenHash] = PasswordResetTokenRecord{
+		ID:        uuid.New(),
+		UserID:    p.UserID,
+		TokenHash: p.TokenHash,
+		ExpiresAt: p.ExpiresAt,
+	}
+	return nil
+}
+
+func (f *fakeRepo) GetPasswordResetTokenByHash(_ context.Context, hash string) (PasswordResetTokenRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rec, ok := f.resetTokens[hash]
+	if !ok {
+		return PasswordResetTokenRecord{}, apperror.ErrInvalidToken
+	}
+	return rec, nil
+}
+
+func (f *fakeRepo) MarkPasswordResetTokenUsed(_ context.Context, id uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for k, rec := range f.resetTokens {
+		if rec.ID == id {
+			now := time.Now().UTC()
+			rec.UsedAt = &now
+			f.resetTokens[k] = rec
+		}
+	}
+	return nil
+}
+
+func (f *fakeRepo) UpdateUserPassword(_ context.Context, userID uuid.UUID, hashedPassword string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for email, u := range f.users {
+		if u.ID == userID {
+			u.HashedPassword = hashedPassword
+			f.users[email] = u
 		}
 	}
 	return nil

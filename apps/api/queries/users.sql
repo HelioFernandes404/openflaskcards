@@ -3,6 +3,11 @@ INSERT INTO users (email, nickname, name, hashed_password, fsrs_parameters, desi
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
+-- name: UpdateUserPassword :exec
+-- Used by the password reset flow (auth package) to set a new hashed
+-- password without touching any other user field.
+UPDATE users SET hashed_password = $2, updated_at = NOW() WHERE id = $1;
+
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;
 

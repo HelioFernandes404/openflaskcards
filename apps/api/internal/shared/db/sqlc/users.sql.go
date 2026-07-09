@@ -345,3 +345,19 @@ func (q *Queries) UpdateUserOptimizationStatus(ctx context.Context, arg UpdateUs
 	)
 	return i, err
 }
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE users SET hashed_password = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateUserPasswordParams struct {
+	ID             uuid.UUID `json:"id"`
+	HashedPassword *string   `json:"hashed_password"`
+}
+
+// Used by the password reset flow (auth package) to set a new hashed
+// password without touching any other user field.
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.HashedPassword)
+	return err
+}

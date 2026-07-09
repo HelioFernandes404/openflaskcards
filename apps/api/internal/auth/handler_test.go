@@ -221,3 +221,99 @@ func TestRegisterRoutesAppliesSensitiveMiddlewareOnlyToCredentialRoutes(t *testi
 		t.Error("logout: sensitive middleware should not apply to logout")
 	}
 }
+
+func setupTestRouterWithMailer() (*gin.Engine, *fakeMailer) {
+	gin.SetMode(gin.TestMode)
+	jwt := NewJWTManager([]byte("test-secret-test-secret-test-secret-32"), 15*time.Minute)
+	mailer := &fakeMailer{}
+	svc := NewService(newFakeRepo(), jwt, 30, WithPasswordReset(mailer, "http://localhost:5173", 30*time.Minute))
+	h := NewHandler(svc)
+	r := gin.New()
+	g := r.Group("/api/v1/auth")
+	h.RegisterRoutes(g)
+	return r, mailer
+}
+
+func TestForgotPasswordEndpointAlwaysReturns200(t *testing.T) {
+	r, _ := setupTestRouterWithMailer()
+
+	body, _ := json.Marshal(map[string]string{"email": "nobody@example.com"})
+	req := httptest.NewRequest("POST", "/api/v1/auth/forgot-password", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 even for an unknown email, body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestForgotPasswordThenResetPasswordEndToEnd(t *testing.T) {
+	r, mailer := setupTestRouterWithMailer()
+
+	regBody, _ := json.Marshal(map[string]string{
+		"email": "u@x.com", "nickname": "ux", "password": "old-password",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewReader(regBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("register: status %d, body=%s", w.Code, w.Body.String())
+	}
+
+	forgotBody, _ := json.Marshal(map[string]string{"email": "u@x.com"})
+	req = httptest.NewRequest("POST", "/api/v1/auth/forgot-password", bytes.NewReader(forgotBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("forgot-password: status %d, body=%s", w.Code, w.Body.String())
+	}
+	if mailer.count() != 1 {
+		t.Fatalf("expected 1 email sent, got %d", mailer.count())
+	}
+	token := extractToken(mailer.last().body)
+	if token == "" {
+		t.Fatalf("could not extract token from email body: %q", mailer.last().body)
+	}
+
+	resetBody, _ := json.Marshal(map[string]string{"token": token, "password": "new-password"})
+	req = httptest.NewRequest("POST", "/api/v1/auth/reset-password", bytes.NewReader(resetBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("reset-password: status %d, body=%s", w.Code, w.Body.String())
+	}
+
+	// Old password rejected, new password accepted.
+	loginBody, _ := json.Marshal(map[string]string{"email": "u@x.com", "password": "old-password"})
+	req = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("login with old password: got %d, want 401", w.Code)
+	}
+
+	loginBody, _ = json.Marshal(map[string]string{"email": "u@x.com", "password": "new-password"})
+	req = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("login with new password: got %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestResetPasswordEndpointRejectsInvalidToken(t *testing.T) {
+	r, _ := setupTestRouterWithMailer()
+	body, _ := json.Marshal(map[string]string{"token": "bogus", "password": "new-password"})
+	req := httptest.NewRequest("POST", "/api/v1/auth/reset-password", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want 401, body=%s", w.Code, w.Body.String())
+	}
+}

@@ -101,6 +101,43 @@ func (r *pgRepository) DeleteAllRefreshTokensForUser(ctx context.Context, userID
 	return r.q.DeleteAllRefreshTokensForUser(ctx, userID)
 }
 
+func (r *pgRepository) CreatePasswordResetToken(ctx context.Context, p CreatePasswordResetTokenParams) error {
+	_, err := r.q.CreatePasswordResetToken(ctx, db.CreatePasswordResetTokenParams{
+		UserID:    p.UserID,
+		TokenHash: p.TokenHash,
+		ExpiresAt: p.ExpiresAt,
+	})
+	return err
+}
+
+func (r *pgRepository) GetPasswordResetTokenByHash(ctx context.Context, hash string) (PasswordResetTokenRecord, error) {
+	row, err := r.q.GetPasswordResetTokenByHash(ctx, hash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PasswordResetTokenRecord{}, apperror.ErrInvalidToken
+		}
+		return PasswordResetTokenRecord{}, err
+	}
+	return PasswordResetTokenRecord{
+		ID:        row.ID,
+		UserID:    row.UserID,
+		TokenHash: row.TokenHash,
+		ExpiresAt: row.ExpiresAt,
+		UsedAt:    row.UsedAt,
+	}, nil
+}
+
+func (r *pgRepository) MarkPasswordResetTokenUsed(ctx context.Context, id uuid.UUID) error {
+	return r.q.MarkPasswordResetTokenUsed(ctx, id)
+}
+
+func (r *pgRepository) UpdateUserPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error {
+	return r.q.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		ID:             userID,
+		HashedPassword: &hashedPassword,
+	})
+}
+
 func userFromRow(row db.User) User {
 	var hashed string
 	if row.HashedPassword != nil {
