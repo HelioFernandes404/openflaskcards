@@ -177,11 +177,18 @@ export function useStudySession(
   const flipRef = useRef<() => Promise<void>>(async () => {})
 
   useEffect(() => {
+    let cancelled = false
+
     const loadDueCards = async () => {
       if (!deckId) return
       setLoading(true)
+      setCurrentCardIndex(0)
+      setIsFlipped(false)
+      setCurrentCardBack(null)
+      setPreview(null)
       try {
         const summary = await getDueCardsSummary(deckId)
+        if (cancelled) return
         if (summary) {
           setCardFronts(summary.cards)
           setQuotaInfo({
@@ -194,6 +201,7 @@ export function useStudySession(
           setCardFronts([])
         }
       } catch (error) {
+        if (cancelled) return
         console.error('Failed to load due cards:', error)
         showToast(
           getUserFacingErrorMessage(error, {
@@ -203,11 +211,15 @@ export function useStudySession(
         )
         setCardFronts([])
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     void loadDueCards()
+
+    return () => {
+      cancelled = true
+    }
   }, [deckId, getDueCardsSummary, showToast])
 
   useEffect(() => {

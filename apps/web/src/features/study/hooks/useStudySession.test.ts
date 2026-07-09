@@ -91,6 +91,14 @@ const mockDecks: Deck[] = [
     updatedAt: '2024-01-01T00:00:00Z',
     newCardsDailyLimit: 10,
   },
+  {
+    id: 'deck-2',
+    name: 'Other Deck',
+    userId: 'user-1',
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    newCardsDailyLimit: 10,
+  },
 ]
 
 function makeCardFront(overrides: Partial<CardFront>): CardFront {
@@ -391,5 +399,55 @@ describe('useStudySession behavior', () => {
         expect.any(Number),
       ),
     )
+  })
+
+  it('ignores a stale due-cards response after the deck changes mid-fetch', async () => {
+    const { useStudySession } = await import('./useStudySession')
+
+    let resolveDeck1: (value: unknown) => void = () => {}
+    const deck1Promise = new Promise((resolve) => {
+      resolveDeck1 = resolve
+    })
+
+    getDueCardsSummaryMock.mockImplementation((deckId: string) => {
+      if (deckId === 'deck-1') return deck1Promise
+      return Promise.resolve({
+        cards: [makeCardFront({ id: 'deck-2-card', deckId: 'deck-2' })],
+        totalDue: 1,
+        newCardsDailyLimit: 10,
+        newCardsStudiedToday: 0,
+        remainingNewCardsToday: 10,
+        isNewCardsLimitReached: false,
+      })
+    })
+
+    const { result, rerender } = renderHook(
+      ({ deckId }) => useStudySession(deckId),
+      { initialProps: { deckId: 'deck-1' } },
+    )
+
+    // Navigate away to deck-2 before the deck-1 request resolves.
+    rerender({ deckId: 'deck-2' })
+
+    await waitFor(() =>
+      expect(result.current.currentFront?.id).toBe('deck-2-card'),
+    )
+
+    // The stale deck-1 response arrives late; it must not overwrite
+    // the deck-2 cards already loaded into state.
+    await act(async () => {
+      resolveDeck1({
+        cards: [makeCardFront({ id: 'card-1' }), makeCardFront({ id: 'card-2' })],
+        totalDue: 2,
+        newCardsDailyLimit: 10,
+        newCardsStudiedToday: 0,
+        remainingNewCardsToday: 10,
+        isNewCardsLimitReached: false,
+      })
+      await Promise.resolve()
+    })
+
+    expect(result.current.cardFronts).toHaveLength(1)
+    expect(result.current.currentFront?.id).toBe('deck-2-card')
   })
 })
