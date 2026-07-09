@@ -38,8 +38,14 @@ struct Output {
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) if err.kind == ErrorKind::InsufficientData => ExitCode::from(2),
-        Err(_) => ExitCode::FAILURE,
+        Err(err) => {
+            eprintln!("{}", err.message);
+            if err.kind == ErrorKind::InsufficientData {
+                ExitCode::from(2)
+            } else {
+                ExitCode::FAILURE
+            }
+        }
     }
 }
 
@@ -113,6 +119,13 @@ fn run() -> Result<(), RunError> {
         )));
     }
 
+    if let Some(idx) = parameters.iter().position(|v| !v.is_finite()) {
+        return Err(RunError::internal(format!(
+            "compute_parameters produced non-finite weight at index {idx}: {}",
+            parameters[idx]
+        )));
+    }
+
     let fallback_retention = input.current_retention.unwrap_or(0.9).clamp(0.7, 0.99) as f32;
     let optimal = optimal_retention(
         &SimulatorConfig::default(),
@@ -123,6 +136,12 @@ fn run() -> Result<(), RunError> {
     )
     .unwrap_or(fallback_retention)
     .clamp(0.7, 0.99) as f64;
+
+    if !optimal.is_finite() {
+        return Err(RunError::internal(format!(
+            "optimal_retention produced non-finite value: {optimal}"
+        )));
+    }
 
     let weights: Vec<f64> = parameters.iter().map(|v| f64::from(*v)).collect();
     let output = Output {
