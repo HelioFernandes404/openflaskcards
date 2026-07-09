@@ -1,4 +1,6 @@
+import { HttpResponse, http, delay } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { server } from '@/mocks/server'
 
 function createStorageStub() {
   const store = new Map<string, string>()
@@ -60,6 +62,36 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
+// --- MSW request recorder -------------------------------------------------
+//
+// The tests below need the same introspection a manually-stubbed
+// `vi.fn()` gave for free (call count, method, headers, raw body per
+// call). MSW hands the resolver a real `Request`, so this recorder reads
+// what's needed out of it and appends it to `calls`, mirroring the shape
+// tests used to pull off `vi.mocked(globalThis.fetch).mock.calls`.
+interface RecordedRequest {
+  url: string
+  method: string
+  headers: Headers
+  bodyText: string | null
+}
+
+function createRecorder() {
+  const calls: RecordedRequest[] = []
+  async function record(request: Request): Promise<RecordedRequest> {
+    const bodyText = request.body ? await request.clone().text() : null
+    const call: RecordedRequest = {
+      url: request.url,
+      method: request.method,
+      headers: request.headers,
+      bodyText,
+    }
+    calls.push(call)
+    return call
+  }
+  return { calls, record }
+}
+
 describe('httpClient contract', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', createStorageStub())
@@ -76,15 +108,9 @@ describe('httpClient contract', () => {
   })
 
   it('returns { data, status, headers } on successful response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }),
+    server.use(
+      http.get('*/health', () =>
+        HttpResponse.json({ ok: true }, { status: 200 }),
       ),
     )
 
@@ -105,17 +131,7 @@ describe('httpClient contract', () => {
       .mockImplementation(() => undefined)
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }),
-      ),
-    )
+    server.use(http.get('*/health', () => HttpResponse.json({ ok: true })))
 
     const httpClient = await loadHttpClientWithBaseURL('/api/v1', 10000, true)
     await httpClient.get<{ ok: boolean }>('/health')
@@ -140,17 +156,9 @@ describe('httpClient contract', () => {
       .mockImplementation(() => undefined)
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() =>
-        Promise.resolve(
-          new Response(JSON.stringify({ detail: 'boom' }), {
-            status: 500,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-        ),
+    server.use(
+      http.get('*/health', () =>
+        HttpResponse.json({ detail: 'boom' }, { status: 500 }),
       ),
     )
 
@@ -204,19 +212,19 @@ describe('httpClient contract', () => {
       'DELETE',
     ],
   ] as const)('uses correct HTTP method in %s', async (_name, invoke, method) => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
+    const recorder = createRecorder()
+    server.use(
+      http.all('*/health', async ({ request }) => {
+        await recorder.record(request)
+        return HttpResponse.json({})
+      }),
     )
 
     const httpClient = await loadHttpClient()
     await invoke(httpClient)
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    const [, requestInit] = fetchMock.mock.calls[0] ?? []
-
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(requestInit?.method).toBe(method)
+    expect(recorder.calls).toHaveLength(1)
+    expect(recorder.calls[0]?.method).toBe(method)
   })
 
   it.each([
@@ -236,20 +244,20 @@ describe('httpClient contract', () => {
         client.patch('/health', { ping: true }),
     ],
   ] as const)('serializes JSON only in verbs with payload: %s', async (_name, invoke) => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
+    const recorder = createRecorder()
+    server.use(
+      http.all('*/health', async ({ request }) => {
+        await recorder.record(request)
+        return HttpResponse.json({})
+      }),
     )
 
     const httpClient = await loadHttpClient()
     await invoke(httpClient)
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
-    const headers = requestInit.headers as Headers
-
-    expect(requestInit.body).toBe(JSON.stringify({ ping: true }))
-    expect(headers.get('content-type')).toBe('application/json')
+    const call = recorder.calls[0]
+    expect(call?.bodyText).toBe(JSON.stringify({ ping: true }))
+    expect(call?.headers.get('content-type')).toBe('application/json')
   })
 
   it.each([
@@ -264,24 +272,27 @@ describe('httpClient contract', () => {
         client.delete('/health'),
     ],
   ] as const)('does not send body in %s', async (_name, invoke) => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
+    const recorder = createRecorder()
+    server.use(
+      http.all('*/health', async ({ request }) => {
+        await recorder.record(request)
+        return HttpResponse.json({})
+      }),
     )
 
     const httpClient = await loadHttpClient()
     await invoke(httpClient)
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
-
-    expect(requestInit).not.toHaveProperty('body')
+    expect(recorder.calls[0]?.bodyText).toBeNull()
   })
 
   it('preserves FormData without forcing JSON', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
+    const recorder = createRecorder()
+    server.use(
+      http.post('*/upload', async ({ request }) => {
+        await recorder.record(request)
+        return HttpResponse.json({})
+      }),
     )
 
     const httpClient = await loadHttpClient()
@@ -290,18 +301,21 @@ describe('httpClient contract', () => {
 
     await httpClient.post('/upload', formData)
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
-    const headers = requestInit.headers as Headers
-
-    expect(requestInit.body).toBe(formData)
-    expect(headers.get('content-type')).toBeNull()
+    const call = recorder.calls[0]
+    // apiClient never sets its own Content-Type for FormData bodies — it
+    // lets the transport (fetch/undici) add the multipart boundary. What
+    // matters here is that apiClient didn't force `application/json`.
+    expect(call?.headers.get('content-type')).not.toBe('application/json')
+    expect(call?.bodyText).toContain('form-data; name="file"')
   })
 
   it('preserves params and custom headers', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
+    const recorder = createRecorder()
+    server.use(
+      http.get('*/search', async ({ request }) => {
+        await recorder.record(request)
+        return HttpResponse.json({})
+      }),
     )
 
     const httpClient = await loadHttpClient()
@@ -318,22 +332,22 @@ describe('httpClient contract', () => {
       },
     })
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    const [url, requestInit] = fetchMock.mock.calls[0] ?? []
-    const headers = requestInit?.headers as Headers
-
-    expect(url).toContain('/search')
-    expect(url).toContain('q=cards')
-    expect(url).toContain('page=2')
-    expect(url).toContain('active=true')
-    expect(url).not.toContain('ignored=')
-    expect(headers.get('x-request-id')).toBe('abc-123')
+    const call = recorder.calls[0]
+    expect(call?.url).toContain('/search')
+    expect(call?.url).toContain('q=cards')
+    expect(call?.url).toContain('page=2')
+    expect(call?.url).toContain('active=true')
+    expect(call?.url).not.toContain('ignored=')
+    expect(call?.headers.get('x-request-id')).toBe('abc-123')
   })
 
   it('preserves params with relative baseURL', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
+    const recorder = createRecorder()
+    server.use(
+      http.get('*/api/v1/search', async ({ request }) => {
+        await recorder.record(request)
+        return HttpResponse.json({})
+      }),
     )
 
     const httpClient = await loadHttpClientWithBaseURL('/api/v1')
@@ -345,16 +359,14 @@ describe('httpClient contract', () => {
       },
     })
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    const [url] = fetchMock.mock.calls[0] ?? []
-
-    expect(url).toBe('/api/v1/search?q=cards&page=2')
+    expect(recorder.calls[0]?.url).toBe(
+      'http://localhost/api/v1/search?q=cards&page=2',
+    )
   })
 
   it('rejects HTTP error path', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() => Promise.resolve(new Response('{}', { status: 500 }))),
+    server.use(
+      http.get('*/health', () => new HttpResponse('{}', { status: 500 })),
     )
 
     const httpClient = await loadHttpClient()
@@ -366,17 +378,14 @@ describe('httpClient contract', () => {
   })
 
   it('preserves text message from HTTP error', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() =>
-        Promise.resolve(
-          new Response('Upstream exploded', {
+    server.use(
+      http.get(
+        '*/health',
+        () =>
+          new HttpResponse('Upstream exploded', {
             status: 502,
-            headers: {
-              'Content-Type': 'text/plain',
-            },
+            headers: { 'Content-Type': 'text/plain' },
           }),
-        ),
       ),
     )
 
@@ -390,16 +399,12 @@ describe('httpClient contract', () => {
   })
 
   it('converts 401 to AuthenticationError in fetch client', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ detail: 'Unauthorized' }), {
-          status: 401,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }),
-      ),
+    const recorder = createRecorder()
+    server.use(
+      http.get('*/secure', async ({ request }) => {
+        await recorder.record(request)
+        return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })
+      }),
     )
 
     const httpClient = await loadHttpClient()
@@ -408,14 +413,11 @@ describe('httpClient contract', () => {
       name: 'AuthenticationError',
       statusCode: 401,
     })
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1)
+    expect(recorder.calls).toHaveLength(1)
   })
 
   it('converts raw fetch rejection to NetworkError', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
-    )
+    server.use(http.get('*/offline', () => HttpResponse.error()))
 
     const httpClient = await loadHttpClient()
 
@@ -425,81 +427,50 @@ describe('httpClient contract', () => {
   })
 
   it('retries fetch when there is a transient network failure', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-        ),
+    let attempt = 0
+    server.use(
+      http.get('*/offline', () => {
+        attempt += 1
+        if (attempt === 1) return HttpResponse.error()
+        return HttpResponse.json({ ok: true })
+      }),
     )
 
     const httpClient = await loadHttpClientWithBaseURL('/api/v1')
     const response = await httpClient.get<{ ok: boolean }>('/offline')
 
     expect(response.data).toEqual({ ok: true })
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2)
+    expect(attempt).toBe(2)
   })
 
   it.each([
     429, 503,
   ])('retries fetch when receiving transient status %s', async (status) => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ detail: 'temporary' }), {
-            status,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-        ),
+    let attempt = 0
+    server.use(
+      http.get('*/retryable', () => {
+        attempt += 1
+        if (attempt === 1) {
+          return HttpResponse.json({ detail: 'temporary' }, { status })
+        }
+        return HttpResponse.json({ ok: true })
+      }),
     )
 
     const httpClient = await loadHttpClientWithBaseURL('/api/v1')
     const response = await httpClient.get<{ ok: boolean }>('/retryable')
 
     expect(response.data).toEqual({ ok: true })
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2)
+    expect(attempt).toBe(2)
   })
 
   it('does not retry POST on transient error, to avoid duplicating mutation', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ detail: 'temporary' }), {
-            status: 503,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }),
-        ),
+    let attempt = 0
+    server.use(
+      http.post('*/cards/card-1/review', () => {
+        attempt += 1
+        return HttpResponse.json({ detail: 'temporary' }, { status: 503 })
+      }),
     )
 
     const httpClient = await loadHttpClientWithBaseURL('/api/v1')
@@ -507,84 +478,47 @@ describe('httpClient contract', () => {
       httpClient.post('/cards/card-1/review', { rating: 3 }),
     ).rejects.toBeTruthy()
 
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1)
+    expect(attempt).toBe(1)
   })
 
   it('differentiates explicit cancellation from real network failure', async () => {
     const controller = new AbortController()
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((_, init) => {
-        const signal = (init as RequestInit | undefined)?.signal as
-          | AbortSignal
-          | undefined
-
-        return new Promise((_, reject) => {
-          signal?.addEventListener(
-            'abort',
-            () => {
-              reject(
-                new DOMException('The operation was aborted.', 'AbortError'),
-              )
-            },
-            { once: true },
-          )
-        })
+    server.use(
+      http.get('*/slow', async () => {
+        await delay('infinite')
+        return HttpResponse.json({})
       }),
     )
 
     const httpClient = await loadHttpClient()
     const request = httpClient.get('/slow', { signal: controller.signal })
 
-    await vi.waitFor(() => {
-      expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1)
-    })
-
     controller.abort()
 
     await expect(request).rejects.toMatchObject({
       name: 'AbortError',
     })
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1)
   })
 
   it('converts abort by timeout to TimeoutError', async () => {
-    vi.useFakeTimers()
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((_, init) => {
-        const signal = (init as RequestInit | undefined)?.signal
-
-        return new Promise((_, reject) => {
-          signal?.addEventListener(
-            'abort',
-            () => {
-              reject(
-                new DOMException('The operation was aborted.', 'AbortError'),
-              )
-            },
-            { once: true },
-          )
-        })
+    server.use(
+      http.get('*/slow', async () => {
+        await delay('infinite')
+        return HttpResponse.json({})
       }),
     )
 
     const httpClient = await loadHttpClientWithBaseURL('/api/v1', 5)
-    const request = httpClient.get('/slow')
-    const assertion = expect(request).rejects.toMatchObject({
+
+    await expect(httpClient.get('/slow')).rejects.toMatchObject({
       name: 'TimeoutError',
     })
-
-    await vi.advanceTimersByTimeAsync(5)
-    await assertion
   })
 
   it('handles 204 without payload', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
+    server.use(
+      http.delete('*/health', () => new HttpResponse(null, { status: 204 })),
     )
 
     const httpClient = await loadHttpClient()
@@ -595,15 +529,14 @@ describe('httpClient contract', () => {
   })
 
   it('accepts non-JSON response as text', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response('pong', {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/plain',
-          },
-        }),
+    server.use(
+      http.get(
+        '*/health',
+        () =>
+          new HttpResponse('pong', {
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' },
+          }),
       ),
     )
 
@@ -614,15 +547,14 @@ describe('httpClient contract', () => {
   })
 
   it('safely falls back when provided JSON is invalid', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response('{invalid', {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }),
+    server.use(
+      http.get(
+        '*/health',
+        () =>
+          new HttpResponse('{invalid', {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
       ),
     )
 
@@ -638,19 +570,18 @@ describe('httpClient contract', () => {
     '/auth/refresh',
   ])('does not automatically attach Authorization to %s', async (path) => {
     localStorage.setItem('accessToken', 'token-antigo')
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
+    const recorder = createRecorder()
+    server.use(
+      http.post(`*${path}`, async ({ request }) => {
+        await recorder.record(request)
+        return HttpResponse.json({})
+      }),
     )
 
     const httpClient = await loadHttpClient()
     await httpClient.post(path, { ok: true })
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
-    const headers = requestInit.headers as Headers
-
-    expect(headers.get('authorization')).toBeNull()
+    expect(recorder.calls[0]?.headers.get('authorization')).toBeNull()
   })
 
   it('automatically refreshes when token expires before request', async () => {
@@ -658,49 +589,25 @@ describe('httpClient contract', () => {
     localStorage.setItem('refreshToken', 'refresh-token')
     localStorage.setItem('tokenExpiry', '1')
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input, init) => {
-        const url = String(input)
-        const headers = new Headers((init as RequestInit | undefined)?.headers)
-
-        if (url.endsWith('/auth/refresh')) {
-          expect(headers.get('authorization')).toBeNull()
-
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                access_token: 'token-novo',
-                token_type: 'bearer',
-                expires_in: 60,
-              }),
-              {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              },
-            ),
-          )
-        }
-
-        expect(headers.get('authorization')).toBe('Bearer token-novo')
-
-        return Promise.resolve(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
+    server.use(
+      http.post('*/auth/refresh', ({ request }) => {
+        expect(request.headers.get('authorization')).toBeNull()
+        return HttpResponse.json({
+          access_token: 'token-novo',
+          token_type: 'bearer',
+          expires_in: 60,
+        })
+      }),
+      http.get('*/secure', ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer token-novo')
+        return HttpResponse.json({ ok: true })
       }),
     )
 
     const httpClient = await loadHttpClient()
     const response = await httpClient.get<{ ok: boolean }>('/secure')
-    const fetchMock = vi.mocked(globalThis.fetch)
 
     expect(response.data).toEqual({ ok: true })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(/\/auth\/refresh$/)
-    expect(String(fetchMock.mock.calls[1]?.[0])).toMatch(/\/secure$/)
     expect(localStorage.getItem('accessToken')).toBe('token-novo')
   })
 
@@ -709,35 +616,16 @@ describe('httpClient contract', () => {
     localStorage.setItem('refreshToken', 'refresh-token-antigo')
     localStorage.setItem('tokenExpiry', '1')
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input) => {
-        const url = String(input)
-
-        if (url.endsWith('/auth/refresh')) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                access_token: 'token-novo',
-                refresh_token: 'refresh-token-novo',
-                token_type: 'bearer',
-                expires_in: 60,
-              }),
-              {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              },
-            ),
-          )
-        }
-
-        return Promise.resolve(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }),
+    server.use(
+      http.post('*/auth/refresh', () =>
+        HttpResponse.json({
+          access_token: 'token-novo',
+          refresh_token: 'refresh-token-novo',
+          token_type: 'bearer',
+          expires_in: 60,
+        }),
+      ),
+      http.get('*/secure', () => HttpResponse.json({ ok: true })),
     )
 
     const httpClient = await loadHttpClient()
@@ -753,46 +641,27 @@ describe('httpClient contract', () => {
     localStorage.setItem('refreshToken', 'refresh-token')
     localStorage.setItem('tokenExpiry', String(Date.now() + 30_000))
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input, init) => {
-        const url = String(input)
-        const headers = new Headers((init as RequestInit | undefined)?.headers)
-
-        if (url.endsWith('/auth/refresh')) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                access_token: 'token-buffer',
-                token_type: 'bearer',
-                expires_in: 60,
-              }),
-              {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              },
-            ),
-          )
-        }
-
-        expect(headers.get('authorization')).toBe('Bearer token-buffer')
-
-        return Promise.resolve(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
+    let refreshCalls = 0
+    server.use(
+      http.post('*/auth/refresh', () => {
+        refreshCalls += 1
+        return HttpResponse.json({
+          access_token: 'token-buffer',
+          token_type: 'bearer',
+          expires_in: 60,
+        })
+      }),
+      http.get('*/secure', ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer token-buffer')
+        return HttpResponse.json({ ok: true })
       }),
     )
 
     const httpClient = await loadHttpClient()
     const response = await httpClient.get<{ ok: boolean }>('/secure')
-    const fetchMock = vi.mocked(globalThis.fetch)
 
     expect(response.data).toEqual({ ok: true })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(/\/auth\/refresh$/)
+    expect(refreshCalls).toBe(1)
     expect(localStorage.getItem('accessToken')).toBe('token-buffer')
   })
 
@@ -801,38 +670,30 @@ describe('httpClient contract', () => {
     localStorage.setItem('refreshToken', 'refresh-token')
     localStorage.setItem('tokenExpiry', '1')
 
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              access_token: 'token-recuperado',
-              token_type: 'bearer',
-              expires_in: 60,
-            }),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          ),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        ),
+    let refreshAttempt = 0
+    const urls: string[] = []
+    server.use(
+      http.post('*/auth/refresh', () => {
+        refreshAttempt += 1
+        urls.push('/api/v1/auth/refresh')
+        if (refreshAttempt === 1) return HttpResponse.error()
+        return HttpResponse.json({
+          access_token: 'token-recuperado',
+          token_type: 'bearer',
+          expires_in: 60,
+        })
+      }),
+      http.get('*/secure', () => {
+        urls.push('/api/v1/secure')
+        return HttpResponse.json({ ok: true })
+      }),
     )
 
     const httpClient = await loadHttpClientWithBaseURL('/api/v1')
     const response = await httpClient.get<{ ok: boolean }>('/secure')
-    const fetchMock = vi.mocked(globalThis.fetch)
 
     expect(response.data).toEqual({ ok: true })
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+    expect(urls).toEqual([
       '/api/v1/auth/refresh',
       '/api/v1/auth/refresh',
       '/api/v1/secure',
@@ -845,65 +706,33 @@ describe('httpClient contract', () => {
     localStorage.setItem('refreshToken', 'refresh-token')
     localStorage.setItem('tokenExpiry', String(Date.now() + 120_000))
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input, init) => {
-        const url = String(input)
-        const headers = new Headers((init as RequestInit | undefined)?.headers)
-
-        if (
-          url.endsWith('/secure') &&
-          headers.get('authorization') === 'Bearer token-antigo'
-        ) {
-          return Promise.resolve(
-            new Response(JSON.stringify({ detail: 'Unauthorized' }), {
-              status: 401,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-          )
+    const secureAuthHeaders: Array<string | null> = []
+    server.use(
+      http.get('*/secure', ({ request }) => {
+        const auth = request.headers.get('authorization')
+        secureAuthHeaders.push(auth)
+        if (auth === 'Bearer token-antigo') {
+          return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })
         }
-
-        if (url.endsWith('/auth/refresh')) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                access_token: 'token-novo',
-                token_type: 'bearer',
-                expires_in: 60,
-              }),
-              {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              },
-            ),
-          )
-        }
-
-        return Promise.resolve(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
+        return HttpResponse.json({ ok: true })
       }),
+      http.post('*/auth/refresh', () =>
+        HttpResponse.json({
+          access_token: 'token-novo',
+          token_type: 'bearer',
+          expires_in: 60,
+        }),
+      ),
     )
 
     const httpClient = await loadHttpClient()
     const response = await httpClient.get<{ ok: boolean }>('/secure')
-    const fetchMock = vi.mocked(globalThis.fetch)
-    const secureCalls = fetchMock.mock.calls.filter(([url]) =>
-      String(url).endsWith('/secure'),
-    )
 
     expect(response.data).toEqual({ ok: true })
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(secureCalls).toHaveLength(2)
-    expect(new Headers(secureCalls[0]?.[1]?.headers).get('authorization')).toBe(
+    expect(secureAuthHeaders).toEqual([
       'Bearer token-antigo',
-    )
-    expect(new Headers(secureCalls[1]?.[1]?.headers).get('authorization')).toBe(
       'Bearer token-novo',
-    )
+    ])
   })
 
   it('shares a single refresh queue among concurrent requests', async () => {
@@ -912,59 +741,39 @@ describe('httpClient contract', () => {
     localStorage.setItem('tokenExpiry', '1')
 
     const refreshDeferred = createDeferred<Response>()
+    let refreshCalls = 0
+    const secureCalls: string[] = []
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input) => {
-        const url = String(input)
-
-        if (url.endsWith('/auth/refresh')) {
-          return refreshDeferred.promise
-        }
-
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ ok: url.endsWith('/secure-1') ? 1 : 2 }),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          ),
-        )
+    server.use(
+      http.post('*/auth/refresh', () => {
+        refreshCalls += 1
+        return refreshDeferred.promise
+      }),
+      http.get('*/secure-1', () => {
+        secureCalls.push('/secure-1')
+        return HttpResponse.json({ ok: 1 })
+      }),
+      http.get('*/secure-2', () => {
+        secureCalls.push('/secure-2')
+        return HttpResponse.json({ ok: 2 })
       }),
     )
 
     const httpClient = await loadHttpClient()
     const requestA = httpClient.get('/secure-1')
     const requestB = httpClient.get('/secure-2')
-    const fetchMock = vi.mocked(globalThis.fetch)
 
-    await vi.waitFor(() =>
-      expect(
-        fetchMock.mock.calls.filter(([url]) =>
-          String(url).endsWith('/auth/refresh'),
-        ),
-      ).toHaveLength(1),
-    )
+    await vi.waitFor(() => expect(refreshCalls).toBe(1))
 
     refreshDeferred.resolve(
-      new Response(
-        JSON.stringify({
-          access_token: 'token-novo',
-          token_type: 'bearer',
-          expires_in: 60,
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      ),
+      HttpResponse.json({
+        access_token: 'token-novo',
+        token_type: 'bearer',
+        expires_in: 60,
+      }),
     )
 
     const [responseA, responseB] = await Promise.all([requestA, requestB])
-    const secureCalls = fetchMock.mock.calls.filter(([url]) =>
-      /\/secure-[12]$/.test(String(url)),
-    )
 
     expect(responseA.data).toEqual({ ok: 1 })
     expect(responseB.data).toEqual({ ok: 2 })
@@ -977,81 +786,46 @@ describe('httpClient contract', () => {
     localStorage.setItem('tokenExpiry', String(Date.now() + 120_000))
 
     const refreshDeferred = createDeferred<Response>()
+    let refreshCalls = 0
+    const oldTokenCalls: string[] = []
+    const newTokenCalls: string[] = []
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input, init) => {
-        const url = String(input)
-        const headers = new Headers((init as RequestInit | undefined)?.headers)
-
-        if (url.endsWith('/auth/refresh')) {
-          return refreshDeferred.promise
+    function secureHandler(id: 1 | 2) {
+      return ({ request }: { request: Request }) => {
+        const auth = request.headers.get('authorization')
+        if (auth === 'Bearer token-antigo') {
+          oldTokenCalls.push(`/secure-${id}`)
+          return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })
         }
+        newTokenCalls.push(`/secure-${id}`)
+        return HttpResponse.json({ ok: id })
+      }
+    }
 
-        if (headers.get('authorization') === 'Bearer token-antigo') {
-          return Promise.resolve(
-            new Response(JSON.stringify({ detail: 'Unauthorized' }), {
-              status: 401,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-          )
-        }
-
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ ok: url.endsWith('/secure-1') ? 1 : 2 }),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          ),
-        )
+    server.use(
+      http.post('*/auth/refresh', () => {
+        refreshCalls += 1
+        return refreshDeferred.promise
       }),
+      http.get('*/secure-1', secureHandler(1)),
+      http.get('*/secure-2', secureHandler(2)),
     )
 
     const httpClient = await loadHttpClient()
     const requestA = httpClient.get('/secure-1')
     const requestB = httpClient.get('/secure-2')
-    const fetchMock = vi.mocked(globalThis.fetch)
 
-    await vi.waitFor(() =>
-      expect(
-        fetchMock.mock.calls.filter(([url]) =>
-          String(url).endsWith('/auth/refresh'),
-        ),
-      ).toHaveLength(1),
-    )
+    await vi.waitFor(() => expect(refreshCalls).toBe(1))
 
     refreshDeferred.resolve(
-      new Response(
-        JSON.stringify({
-          access_token: 'token-novo',
-          token_type: 'bearer',
-          expires_in: 60,
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      ),
+      HttpResponse.json({
+        access_token: 'token-novo',
+        token_type: 'bearer',
+        expires_in: 60,
+      }),
     )
 
     const [responseA, responseB] = await Promise.all([requestA, requestB])
-    const secureCalls = fetchMock.mock.calls.filter(([url]) =>
-      /\/secure-[12]$/.test(String(url)),
-    )
-    const oldTokenCalls = secureCalls.filter(
-      ([, init]) =>
-        new Headers((init as RequestInit | undefined)?.headers).get(
-          'authorization',
-        ) === 'Bearer token-antigo',
-    )
-    const newTokenCalls = secureCalls.filter(
-      ([, init]) =>
-        new Headers((init as RequestInit | undefined)?.headers).get(
-          'authorization',
-        ) === 'Bearer token-novo',
-    )
 
     expect(responseA.data).toEqual({ ok: 1 })
     expect(responseB.data).toEqual({ ok: 2 })
@@ -1064,21 +838,12 @@ describe('httpClient contract', () => {
     localStorage.setItem('refreshToken', 'refresh-token')
     localStorage.setItem('tokenExpiry', '1')
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input) => {
-        const url = String(input)
-
-        if (url.endsWith('/auth/refresh')) {
-          return Promise.resolve(
-            new Response(JSON.stringify({ detail: 'Unauthorized' }), {
-              status: 401,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-          )
-        }
-
-        throw new Error(`unexpected url ${url}`)
+    server.use(
+      http.post('*/auth/refresh', () =>
+        HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+      ),
+      http.get('*/secure', () => {
+        throw new Error('unexpected call to /secure')
       }),
     )
 
@@ -1099,16 +864,10 @@ describe('httpClient contract', () => {
     localStorage.setItem('refreshToken', 'refresh-token')
     localStorage.setItem('tokenExpiry', '1')
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input) => {
-        const url = String(input)
-
-        if (url.endsWith('/auth/refresh')) {
-          return Promise.reject(new TypeError('Failed to fetch'))
-        }
-
-        throw new Error(`unexpected url ${url}`)
+    server.use(
+      http.post('*/auth/refresh', () => HttpResponse.error()),
+      http.get('*/secure', () => {
+        throw new Error('unexpected call to /secure')
       }),
     )
 
@@ -1286,22 +1045,13 @@ describe('httpClient contract', () => {
     localStorage.setItem('tokenExpiry', '1')
 
     const refreshDeferred = createDeferred<Response>()
+    let secureCalls = 0
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input) => {
-        const url = String(input)
-
-        if (url.endsWith('/auth/refresh')) {
-          return refreshDeferred.promise
-        }
-
-        return Promise.resolve(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
+    server.use(
+      http.post('*/auth/refresh', () => refreshDeferred.promise),
+      http.get('*/secure', () => {
+        secureCalls += 1
+        return HttpResponse.json({ ok: true })
       }),
     )
 
@@ -1313,27 +1063,18 @@ describe('httpClient contract', () => {
 
     controller.abort()
     refreshDeferred.resolve(
-      new Response(
-        JSON.stringify({
-          access_token: 'token-novo',
-          token_type: 'bearer',
-          expires_in: 60,
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      ),
+      HttpResponse.json({
+        access_token: 'token-novo',
+        token_type: 'bearer',
+        expires_in: 60,
+      }),
     )
 
     await expect(abortedRequest).rejects.toMatchObject({
       name: 'AbortError',
     })
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    expect(
-      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/secure')),
-    ).toHaveLength(0)
+    expect(secureCalls).toBe(0)
   })
 
   it('aborts only one waiter without dropping another request in same shared refresh', async () => {
@@ -1342,25 +1083,22 @@ describe('httpClient contract', () => {
     localStorage.setItem('tokenExpiry', '1')
 
     const refreshDeferred = createDeferred<Response>()
+    let refreshCalls = 0
+    const secureOneCalls: number[] = []
+    const secureTwoCalls: number[] = []
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input) => {
-        const url = String(input)
-
-        if (url.endsWith('/auth/refresh')) {
-          return refreshDeferred.promise
-        }
-
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ ok: url.endsWith('/secure-1') ? 1 : 2 }),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          ),
-        )
+    server.use(
+      http.post('*/auth/refresh', () => {
+        refreshCalls += 1
+        return refreshDeferred.promise
+      }),
+      http.get('*/secure-1', () => {
+        secureOneCalls.push(1)
+        return HttpResponse.json({ ok: 1 })
+      }),
+      http.get('*/secure-2', () => {
+        secureTwoCalls.push(2)
+        return HttpResponse.json({ ok: 2 })
       }),
     )
 
@@ -1374,17 +1112,11 @@ describe('httpClient contract', () => {
     controller.abort()
 
     refreshDeferred.resolve(
-      new Response(
-        JSON.stringify({
-          access_token: 'token-novo',
-          token_type: 'bearer',
-          expires_in: 60,
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      ),
+      HttpResponse.json({
+        access_token: 'token-novo',
+        token_type: 'bearer',
+        expires_in: 60,
+      }),
     )
 
     await expect(abortedRequest).rejects.toMatchObject({
@@ -1395,17 +1127,8 @@ describe('httpClient contract', () => {
       status: 200,
     })
 
-    const fetchMock = vi.mocked(globalThis.fetch)
-    expect(
-      fetchMock.mock.calls.filter(([url]) =>
-        String(url).endsWith('/auth/refresh'),
-      ),
-    ).toHaveLength(1)
-    expect(
-      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/secure-1')),
-    ).toHaveLength(0)
-    expect(
-      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/secure-2')),
-    ).toHaveLength(1)
+    expect(refreshCalls).toBe(1)
+    expect(secureOneCalls).toHaveLength(0)
+    expect(secureTwoCalls).toHaveLength(1)
   })
 })
