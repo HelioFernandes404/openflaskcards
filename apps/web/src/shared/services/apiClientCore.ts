@@ -6,13 +6,8 @@ import {
   logApiResponse,
 } from './apiLogger'
 import { ApiError, HttpClientError, parseApiError } from './apiErrors'
-import { ensureValidAccessToken, refreshAccessToken } from './apiClientAuth'
-import {
-  isAuthRouteWithoutToken,
-  type InternalHttpRequestConfig,
-  type NullableAbortSignal,
-} from './apiClientConstants'
-import { throwIfAborted, waitForPromiseOrAbort } from './apiClientAbort'
+import type { InternalHttpRequestConfig } from './apiClientConstants'
+import { throwIfAborted } from './apiClientAbort'
 import {
   buildRequestInit,
   parseErrorData,
@@ -20,7 +15,6 @@ import {
 } from './apiClientRequest'
 import { executeRequest } from './apiClientTransport'
 import type { HttpMethod, HttpResponse } from './httpTypes'
-import { accessTokenStore } from './accessTokenStore'
 
 function resolveRequestId(headers?: HeadersInit): string {
   if (!headers) return generateRequestId()
@@ -47,16 +41,11 @@ export async function performRequest<T>(
   method: HttpMethod,
   url: string,
   config: InternalHttpRequestConfig = {},
-  hasRetried = false,
   parseBody: (response: Response) => Promise<T> = parseResponse<T>,
 ): Promise<HttpResponse<T>> {
-  const shouldHandleAuth = !config.skipAuth && !isAuthRouteWithoutToken(url)
-  const shouldRetryRequest = !isAuthRouteWithoutToken(url)
   let logContext: ReturnType<typeof createApiLogContext> | undefined
 
   try {
-    if (shouldHandleAuth && !hasRetried)
-      await ensureValidAccessToken(config.signal)
     throwIfAborted(config.signal)
     const requestId = resolveRequestId(config.headers)
     const request = buildRequestInit(url, method, config, requestId)
@@ -65,21 +54,9 @@ export async function performRequest<T>(
       body: config.body,
       headers: request.init.headers,
     })
-    const response = await executeRequest(request, shouldRetryRequest)
+    const response = await executeRequest(request, true)
 
     if (!response.ok) {
-      if (
-        response.status === 401 &&
-        shouldHandleAuth &&
-        !hasRetried &&
-        accessTokenStore.hasEverHadSession()
-      ) {
-        await waitForPromiseOrAbort(
-          refreshAccessToken(),
-          config.signal as NullableAbortSignal,
-        )
-        return performRequest<T>(method, url, config, true, parseBody)
-      }
       const apiError = parseApiError(
         new HttpClientError(
           `Request failed with status ${response.status}`,
@@ -104,9 +81,6 @@ export async function performRequest<T>(
 export function performBlobRequest(
   url: string,
   config: InternalHttpRequestConfig = {},
-  hasRetried = false,
 ): Promise<HttpResponse<Blob>> {
-  return performRequest<Blob>('GET', url, config, hasRetried, (response) =>
-    response.blob(),
-  )
+  return performRequest<Blob>('GET', url, config, (response) => response.blob())
 }

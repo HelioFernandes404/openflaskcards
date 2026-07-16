@@ -1,12 +1,10 @@
 import { apiConfig } from '@/shared/config/api'
 import { HttpClientError } from './apiErrors'
-import {
-  isAuthRouteWithoutToken,
-  type InternalHttpRequestConfig,
-  type NullableAbortSignal,
-  type PreparedRequest,
+import type {
+  InternalHttpRequestConfig,
+  NullableAbortSignal,
+  PreparedRequest,
 } from './apiClientConstants'
-import { accessTokenStore } from './accessTokenStore'
 
 function joinUrl(baseURL: string, path: string): string {
   if (/^https?:\/\//i.test(path)) return path
@@ -91,7 +89,7 @@ export function buildRequestInit(
   config: InternalHttpRequestConfig,
   requestId?: string,
 ): PreparedRequest {
-  const { body, headers, params, skipAuth, ...requestInit } = config
+  const { body, headers, params, ...requestInit } = config
   const requestHeaders = new Headers(headers)
   const preparedBody = prepareBody(body)
   if (!requestHeaders.has('Content-Type') && preparedBody.isJson)
@@ -102,20 +100,12 @@ export function buildRequestInit(
     requestHeaders.get('X-Request-Id')
   if (!existingRequestId && requestId)
     requestHeaders.set('X-Request-ID', requestId)
-  if (!skipAuth && !isAuthRouteWithoutToken(url)) {
-    const token = accessTokenStore.get()
-    if (token) requestHeaders.set('Authorization', `Bearer ${token}`)
-  }
   return {
     url: appendParams(joinUrl(apiConfig.baseURL, url), params),
     init: {
       ...requestInit,
       method,
       headers: requestHeaders,
-      // Required so the browser attaches (and the server can set) the
-      // httpOnly refresh token cookie on login/refresh/logout. Harmless on
-      // other requests — Authorization already covers the access token.
-      credentials: 'include',
       ...(preparedBody.body !== undefined ? { body: preparedBody.body } : {}),
     },
   }

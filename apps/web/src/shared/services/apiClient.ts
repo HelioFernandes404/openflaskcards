@@ -12,9 +12,8 @@ class ApiClient implements HttpClient {
     method: HttpMethod,
     url: string,
     config: InternalHttpRequestConfig = {},
-    hasRetried = false,
   ): Promise<HttpResponse<T>> {
-    return performRequest<T>(method, url, config, hasRetried)
+    return performRequest<T>(method, url, config)
   }
 
   get<T>(url: string, config?: HttpRequestConfig): Promise<HttpResponse<T>> {

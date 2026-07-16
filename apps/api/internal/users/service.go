@@ -4,9 +4,9 @@ package users
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
-	"github.com/HelioFernandes404/openflashcards/apps/api/internal/auth"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/apperror"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/fsrs/optimize"
 	db "github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/db/sqlc"
@@ -15,6 +15,15 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// defaultUserFSRSWeights are the initial FSRS scheduler parameters seeded
+// for the single default user (previously the app-wide default used at
+// registration time, back when registration existed).
+var defaultUserFSRSWeights = []float64{
+	0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046,
+	1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315,
+	2.9898, 0.51655, 0.6621, 0.0, 0.0,
+}
 
 type repo interface {
 	getByID(ctx context.Context, id uuid.UUID) (db.User, error)
@@ -55,6 +64,7 @@ func (r *pgRepo) claimOptimizationRun(ctx context.Context, id uuid.UUID) (uuid.U
 }
 
 type Service struct {
+	pool      *pgxpool.Pool
 	r         repo
 	reviews   reviewLister
 	optimizer optimizerRunner
@@ -83,6 +93,7 @@ func (s *Service) WaitForJobs(ctx context.Context) error {
 func NewService(pool *pgxpool.Pool, opts ...ServiceOption) *Service {
 	q := db.New(pool)
 	s := &Service{
+		pool:      pool,
 		r:         &pgRepo{q: q},
 		reviews:   pgReviewLister{q: q},
 		optimizer: optimize.NewRunnerFromEnv(),
@@ -91,6 +102,32 @@ func NewService(pool *pgxpool.Pool, opts ...ServiceOption) *Service {
 		opt(s)
 	}
 	return s
+}
+
+// EnsureDefaultUser idempotently seeds the single default user row this
+// single-user deployment operates as. It is safe to call on every startup:
+// ON CONFLICT DO NOTHING makes it a no-op once the row exists.
+func (s *Service) EnsureDefaultUser(ctx context.Context, id uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO users (id, email, nickname, name, fsrs_parameters, desired_retention)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT DO NOTHING
+	`, id, "owner@localhost", "owner", "Owner", defaultUserFSRSWeights, 0.9)
+	if err != nil {
+		return err
+	}
+
+	var exists bool
+	err = s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, id).Scan(&exists)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		return fmt.Errorf("users: default user %s missing and could not be seeded — database appears to contain legacy multi-user data (conflicting email/nickname); migrate or clear it manually", id)
+	}
+
+	return nil
 }
 
 type User struct {
@@ -114,11 +151,7 @@ type UpdateInput struct {
 	Email    *string
 	Nickname *string
 	Name     *string
-	Password *string
-	// CurrentPassword is the plaintext current password, required to change
-	// Password on accounts that already have a local password.
-	CurrentPassword *string
-	Timezone        *string
+	Timezone *string
 	// TimezoneSet distinguishes "timezone omitted" (keep current value) from
 	// "timezone explicitly sent" (including null, to clear back to default).
 	TimezoneSet bool
@@ -167,8 +200,9 @@ func (s *Service) UpdateFSRS(ctx context.Context, id uuid.UUID, in UpdateFSRSInp
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (User, error) {
 	var resetEmailVerified bool
-	// Note: password hashing handled by caller via auth package if Password set
-	if in.Password != nil || in.Email != nil {
+	// Pointing the account at a different address invalidates the prior
+	// verification: nothing confirms the user actually owns the new one.
+	if in.Email != nil {
 		current, err := s.r.getByID(ctx, id)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -176,29 +210,13 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (Use
 			}
 			return User{}, err
 		}
-		if in.Password != nil {
-			// Accounts with a local password must confirm it before changing it,
-			// so a stolen access token alone can't lock the owner out. Accounts
-			// without one (OAuth) are setting their first password.
-			if current.HashedPassword != nil && *current.HashedPassword != "" {
-				if in.CurrentPassword == nil ||
-					!auth.VerifyPassword(*current.HashedPassword, *in.CurrentPassword) {
-					return User{}, apperror.ErrInvalidCredentials
-				}
-			}
-		}
-		// Pointing the account at a different address invalidates the prior
-		// verification: nothing confirms the user actually owns the new one.
-		if in.Email != nil {
-			resetEmailVerified = *in.Email != current.Email
-		}
+		resetEmailVerified = *in.Email != current.Email
 	}
 	row, err := s.r.update(ctx, db.UpdateUserParams{
 		ID:                 id,
 		Email:              in.Email,
 		Nickname:           in.Nickname,
 		Name:               in.Name,
-		HashedPassword:     in.Password,
 		Timezone:           in.Timezone,
 		TimezoneSet:        &in.TimezoneSet,
 		ResetEmailVerified: &resetEmailVerified,

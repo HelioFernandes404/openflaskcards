@@ -1,36 +1,22 @@
 package auth
 
 import (
-	"net/http"
-	"strings"
-
-	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/apperror"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 const ctxUserIDKey = "userID"
 
-func Middleware(jwt *JWTManager) gin.HandlerFunc {
+// DefaultUserID is the single, fixed user identity used across the API now
+// that multi-user auth has been stripped. Every request is treated as this
+// user; the DB schema and user_id-scoped queries are untouched.
+var DefaultUserID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+// Middleware stamps every request with DefaultUserID. There is no JWT/session
+// check anymore — this is a single-user deployment.
+func Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if header == "" || !strings.HasPrefix(header, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    apperror.ErrUnauthorized.Code,
-				"message": "missing or invalid Authorization header",
-			})
-			return
-		}
-		token := strings.TrimPrefix(header, "Bearer ")
-		claims, err := jwt.Parse(token)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    apperror.ErrInvalidToken.Code,
-				"message": "invalid token",
-			})
-			return
-		}
-		c.Set(ctxUserIDKey, claims.UserID)
+		c.Set(ctxUserIDKey, DefaultUserID)
 		c.Next()
 	}
 }

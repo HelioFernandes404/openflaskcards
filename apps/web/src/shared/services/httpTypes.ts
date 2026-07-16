@@ -4,7 +4,6 @@ export interface HttpRequestConfig
   extends Omit<RequestInit, 'body' | 'method' | 'headers'> {
   headers?: Record<string, string>
   params?: Record<string, string | number | boolean | undefined>
-  skipAuth?: boolean
 }
 
 export interface HttpResponse<T = unknown> {

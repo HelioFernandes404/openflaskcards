@@ -20,19 +20,18 @@ type moduleServicer interface {
 
 type Handler struct {
 	svc moduleServicer
-	jwt *auth.JWTManager
 }
 
-func NewHandler(svc *Service, jwt *auth.JWTManager) *Handler {
-	return &Handler{svc: svc, jwt: jwt}
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
 }
 
-func newHandlerWithService(svc moduleServicer, jwt *auth.JWTManager) *Handler {
-	return &Handler{svc: svc, jwt: jwt}
+func newHandlerWithService(svc moduleServicer) *Handler {
+	return &Handler{svc: svc}
 }
 
 func (h *Handler) RegisterRoutes(g *gin.RouterGroup) {
-	g.Use(auth.Middleware(h.jwt))
+	g.Use(auth.Middleware())
 	g.POST("", h.create)
 	g.POST("/", h.create)
 	g.GET("", h.list)

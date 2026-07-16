@@ -14,15 +14,14 @@ import (
 
 type Handler struct {
 	svc *Service
-	jwt *auth.JWTManager
 }
 
-func NewHandler(svc *Service, jwt *auth.JWTManager) *Handler {
-	return &Handler{svc: svc, jwt: jwt}
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
 }
 
 func (h *Handler) RegisterRoutes(g *gin.RouterGroup) {
-	g.Use(auth.Middleware(h.jwt))
+	g.Use(auth.Middleware())
 	g.POST("/images", h.uploadImage)
 	g.GET("/:id", h.get)
 	g.DELETE("/:id", h.delete)

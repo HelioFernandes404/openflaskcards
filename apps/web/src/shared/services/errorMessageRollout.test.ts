@@ -5,8 +5,6 @@ import { describe, expect, it } from 'vitest'
 const projectRoot = resolve(__dirname, '../../..')
 
 const filesWithoutRawErrorMessages = [
-  'src/features/auth/pages/LoginPage.tsx',
-  'src/features/auth/pages/RegisterPage.tsx',
   'src/features/study/pages/StudySession.tsx',
   'src/features/algorithm-settings/hooks/useAlgorithmSettings.ts',
   'src/features/cards/importExport/hooks/useDeckCardsImport.ts',

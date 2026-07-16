@@ -7,7 +7,7 @@ This app lives in `apps/web` and uses a feature-based React structure. Main sour
 Install dependencies with `npm install`. Use `npm run dev` to start the Vite dev server and `npm run build` to run the TypeScript build plus production bundle. Run `npm run preview` to inspect the production build locally. Lint with `npm run lint`. Unit tests use `npm run test:unit`; seed test data first with `npm run test:seed` when needed. The local `Makefile` also provides shortcuts such as `make test`, `make lint`, and `make typecheck`.
 
 ## Coding Style & Naming Conventions
-Use TypeScript and React with 2-space indentation and keep code compatible with the Biome config in `biome.json`. Prefer `PascalCase` for components and pages, `camelCase` for hooks and utilities, and keep feature-specific code inside its feature folder. Shared primitives belong in `src/shared/components`. Follow existing filenames such as `LoginPage.tsx`, `useAuth.tsx`, and `apiClient.ts`.
+Use TypeScript and React with 2-space indentation and keep code compatible with the Biome config in `biome.json`. Prefer `PascalCase` for components and pages, `camelCase` for hooks and utilities, and keep feature-specific code inside its feature folder. Shared primitives belong in `src/shared/components`. Follow existing filenames such as `ProfilePage.tsx`, `useAuth.tsx`, and `apiClient.ts`.
 
 ## Testing Guidelines
 Unit tests run with Vitest and usually sit near the code as `*.test.ts` or `*.test.tsx`, for example `src/shared/config/api.test.ts`. API calls in tests are mocked with MSW (`src/mocks/handlers.ts`). Prefer the narrowest test scope before opening a PR: run the affected unit tests for the feature you changed.

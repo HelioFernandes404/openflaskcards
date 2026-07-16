@@ -28,10 +28,9 @@ function isIdempotentMethod(method: string | undefined): boolean {
 export async function executeRequest(
   request: PreparedRequest,
   useRetry: boolean,
-  // Only /auth/refresh sets this: it's a single, promise-deduplicated call
-  // site (see refreshPromise in apiClientAuth.ts), not a general mutation,
-  // so retrying it on a transient network error doesn't risk duplicating
-  // user data the way retrying e.g. POST /cards/:id/review would.
+  // Set by callers that know their mutation is safe to retry on a
+  // transient network error (e.g. it's promise-deduplicated at the call
+  // site), unlike a general mutation such as POST /cards/:id/review.
   forceRetryForMutation = false,
 ): Promise<Response> {
   const send = async (): Promise<Response> => {

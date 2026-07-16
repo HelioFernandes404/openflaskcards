@@ -13,17 +13,15 @@ import (
 )
 
 type Handler struct {
-	svc     *Service
-	authSvc *auth.Service
-	jwt     *auth.JWTManager
+	svc *Service
 }
 
-func NewHandler(svc *Service, authSvc *auth.Service, jwt *auth.JWTManager) *Handler {
-	return &Handler{svc: svc, authSvc: authSvc, jwt: jwt}
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
 }
 
 func (h *Handler) RegisterRoutes(g *gin.RouterGroup) {
-	g.Use(auth.Middleware(h.jwt))
+	g.Use(auth.Middleware())
 	g.GET("/me", h.me)
 	g.PATCH("/me", h.updateMe)
 	g.PATCH("/me/fsrs", h.updateFSRS)
@@ -48,11 +46,7 @@ type updateMeReq struct {
 	Email    *string `json:"email" binding:"omitempty,email"`
 	Nickname *string `json:"nickname"`
 	Name     *string `json:"name"`
-	Password *string `json:"password" binding:"omitempty,min=8"`
-	// CurrentPassword must match the account's existing password when
-	// Password is set and the account already has a local password.
-	CurrentPassword *string `json:"currentPassword"`
-	Timezone        *string `json:"timezone"`
+	Timezone *string `json:"timezone"`
 }
 
 func (h *Handler) updateMe(c *gin.Context) {
@@ -82,34 +76,16 @@ func (h *Handler) updateMe(c *gin.Context) {
 	_, timezoneSet := raw["timezone"]
 
 	in := UpdateInput{
-		Email:           req.Email,
-		Nickname:        req.Nickname,
-		Name:            req.Name,
-		CurrentPassword: req.CurrentPassword,
-		Timezone:        req.Timezone,
-		TimezoneSet:     timezoneSet,
-	}
-	if req.Password != nil {
-		hashed, err := auth.HashPassword(*req.Password)
-		if err != nil {
-			auth.WriteError(c, err)
-			return
-		}
-		in.Password = &hashed
+		Email:       req.Email,
+		Nickname:    req.Nickname,
+		Name:        req.Name,
+		Timezone:    req.Timezone,
+		TimezoneSet: timezoneSet,
 	}
 	u, err := h.svc.Update(c.Request.Context(), uid, in)
 	if err != nil {
 		auth.WriteError(c, err)
 		return
-	}
-	// Changing the password should end every other session: otherwise a
-	// stolen refresh token from a compromised device stays valid even after
-	// the owner changes their password to try to lock the attacker out.
-	if req.Password != nil && h.authSvc != nil {
-		if err := h.authSvc.LogoutAll(c.Request.Context(), uid); err != nil {
-			auth.WriteError(c, err)
-			return
-		}
 	}
 	c.JSON(http.StatusOK, toResp(u))
 }

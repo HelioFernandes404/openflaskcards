@@ -31,7 +31,6 @@ import type { IStudyService } from '@/services'
 import { ApiStudyService } from '@/features/study/services/ApiStudyService'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useNotification } from '@/shared/providers/NotificationProvider'
-import { accessTokenStore } from '@/shared/services/accessTokenStore'
 import { getUserFacingErrorMessage } from '@/shared/services/userFacingErrors'
 
 interface LoadingState {
@@ -200,7 +199,7 @@ export function StudyDataProvider({
   )
 
   useEffect(() => {
-    if (!user || !accessTokenStore.get()) {
+    if (!user) {
       setDecks([])
       setModules([])
       setCardsByDeck({})

@@ -16,8 +16,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const testSecret = "test-secret-32-chars-long-secret!"
-
 // fakeCardsService is an in-memory implementation of cardsServicer used to
 // exercise the HTTP handlers without a real database.
 type fakeCardsService struct {
@@ -297,19 +295,18 @@ func (f *fakeCardsService) SynthesizeText(_ context.Context, _ string) (string, 
 	return f.synthesizeText, nil
 }
 
-func setupCardsRouter(t *testing.T, svc cardsServicer) (*gin.Engine, *auth.JWTManager, uuid.UUID) {
+func setupCardsRouter(t *testing.T, svc cardsServicer) (*gin.Engine, *fakeJWT, uuid.UUID) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	jwt := auth.NewJWTManager([]byte(testSecret), 15*time.Minute)
-	userID := uuid.New()
-	h := newHandlerWithService(svc, jwt)
+	userID := auth.DefaultUserID
+	h := newHandlerWithService(svc)
 	r := gin.New()
 	h.RegisterCardRoutes(r.Group("/cards"))
 	h.RegisterDeckCardRoutes(r.Group("/decks"))
-	return r, jwt, userID
+	return r, &fakeJWT{}, userID
 }
 
-func tokenFor(t *testing.T, jwt *auth.JWTManager, userID uuid.UUID) string {
+func tokenFor(t *testing.T, jwt *fakeJWT, userID uuid.UUID) string {
 	t.Helper()
 	tok, err := jwt.Sign(userID, "u@example.com")
 	if err != nil {
@@ -317,6 +314,15 @@ func tokenFor(t *testing.T, jwt *auth.JWTManager, userID uuid.UUID) string {
 	}
 	return tok
 }
+
+// fakeJWT stands in for the removed *auth.JWTManager now that the
+// middleware no longer parses a bearer token (single-user mode always
+// resolves the request identity to auth.DefaultUserID). Kept only so
+// existing call sites threading a "jwt" through tokenFor/authedRequest
+// don't need touching one by one.
+type fakeJWT struct{}
+
+func (fakeJWT) Sign(uuid.UUID, string) (string, error) { return "test-token", nil }
 
 func authedRequest(method, path string, body []byte, token string) *http.Request {
 	var req *http.Request
@@ -328,18 +334,6 @@ func authedRequest(method, path string, body []byte, token string) *http.Request
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	return req
-}
-
-func TestCreateCardRequiresAuth(t *testing.T) {
-	r, _, _ := setupCardsRouter(t, newFakeCardsService())
-	body, _ := json.Marshal(map[string]any{"deckId": uuid.New().String(), "front": "f", "back": "b"})
-	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
-	}
 }
 
 func TestCreateCardRejectsMissingFront(t *testing.T) {

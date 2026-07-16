@@ -93,18 +93,18 @@ feature/
 
 ### Routes
 
-| Route | Component | Access |
-|------|------------|--------|
-| `/login` | LoginPage | Public |
-| `/register` | RegisterPage | Public |
-| `/` | Dashboard | Protected |
-| `/profile` | ProfilePage | Protected |
-| `/decks/create` | CreateDeck | Protected |
-| `/decks/:deckId/cards/add` | AddCards | Protected |
-| `/decks/:deckId/cards/import` | ImportExportPage | Protected |
-| `/cards/browse` | BrowseCards | Protected |
-| `/decks/:deckId/study` | StudySession | Protected |
-| `/settings/algorithm` | AlgorithmSettings | Protected |
+| Route | Component |
+|------|------------|
+| `/` | Dashboard |
+| `/profile` | ProfilePage |
+| `/decks/create` | CreateDeck |
+| `/decks/:deckId/cards/add` | AddCards |
+| `/decks/:deckId/cards/import` | ImportExportPage |
+| `/cards/browse` | BrowseCards |
+| `/decks/:deckId/study` | StudySession |
+| `/settings/algorithm` | AlgorithmSettings |
+
+This is a single-user app — there is no login/register flow and no auth gate on routes.
 
 ## Prerequisites
 

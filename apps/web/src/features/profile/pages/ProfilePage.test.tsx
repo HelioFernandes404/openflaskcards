@@ -12,9 +12,7 @@ import { server } from '@/mocks/server'
 import { NotificationProvider } from '@/shared/providers/NotificationProvider'
 import type { User } from '@/shared/types/api'
 
-const navigateMock = vi.fn()
 const refreshUserMock = vi.fn()
-const logoutMock = vi.fn()
 
 const baseUser = {
   id: 'user-1',
@@ -29,13 +27,11 @@ const baseUser = {
 vi.mock('@/features/auth/hooks/useAuth', () => ({
   useAuth: () => ({
     user: baseUser,
-    logout: logoutMock,
     refreshUser: refreshUserMock,
   }),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => navigateMock,
   useRouter: () => ({ history: { canGoBack: () => false } }),
 }))
 

@@ -1,13 +1,5 @@
 import { HttpResponse, http } from 'msw'
 
-// No refresh_token here — the real server sets it as an httpOnly cookie,
-// never in the JSON body (see apps/api/internal/auth/handler.go).
-const mockTokens = {
-  access_token: 'mock-access-token',
-  token_type: 'bearer',
-  expires_in: 900,
-}
-
 const mockUser = {
   id: 'user-1',
   email: 'user@example.com',
@@ -38,19 +30,6 @@ const mockPromptTemplates: Array<{
 
 export const handlers = [
   http.get('*/api/v1/health', () => HttpResponse.json({ status: 'ok' })),
-  http.post('*/api/v1/auth/register', () =>
-    HttpResponse.json(mockTokens, { status: 201 }),
-  ),
-  http.post('*/api/v1/auth/login', () => HttpResponse.json(mockTokens)),
-  http.post('*/api/v1/auth/refresh', () => HttpResponse.json(mockTokens)),
-  http.post('*/api/v1/auth/forgot-password', () =>
-    HttpResponse.json({ message: 'ok' }),
-  ),
-  http.post(
-    '*/api/v1/auth/reset-password',
-    () => new HttpResponse(null, { status: 204 }),
-  ),
-  http.get('*/api/v1/auth/me', () => HttpResponse.json(mockUser)),
   http.get('*/api/v1/users/me', () => HttpResponse.json(mockUser)),
   http.patch('*/api/v1/users/me', async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>

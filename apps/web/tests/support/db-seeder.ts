@@ -10,10 +10,6 @@ type SeederDeck = {
   id: string
   name: string
 }
-type LoginPayload = JsonRecord & {
-  refresh_token?: string
-  refreshToken?: string
-}
 
 async function requestJson<T>(
   path: string,
@@ -35,20 +31,6 @@ async function requestJson<T>(
   return data as T
 }
 
-function getAccessToken(payload: JsonRecord): string | undefined {
-  const accessToken = payload.accessToken
-  if (typeof accessToken === 'string' && accessToken.length > 0) {
-    return accessToken
-  }
-
-  const access_token = payload.access_token
-  if (typeof access_token === 'string' && access_token.length > 0) {
-    return access_token
-  }
-
-  return undefined
-}
-
 function isConflictError(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -60,56 +42,23 @@ function isConflictError(error: unknown): boolean {
   )
 }
 
-async function loginUser(user: TestUser): Promise<LoginPayload> {
-  return requestJson<LoginPayload>('/auth/login', {
-    method: 'POST',
-    headers: JSON_HEADERS,
-    body: JSON.stringify({
-      email: user.email,
-      password: user.password,
-    }),
-  })
-}
-
-async function ensureUser(user: TestUser): Promise<LoginPayload> {
-  try {
-    await requestJson('/auth/register', {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify(user),
-    })
-  } catch (error) {
-    if (!isConflictError(error)) {
-      throw error
-    }
-  }
-
-  return loginUser(user)
-}
-
-async function listDecks(token: string): Promise<SeederDeck[]> {
+async function listDecks(): Promise<SeederDeck[]> {
   return requestJson<SeederDeck[]>('/decks', {
     method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
   })
 }
 
-async function deleteDeck(deckId: string, token: string): Promise<void> {
+async function deleteDeck(deckId: string): Promise<void> {
   await requestJson(`/decks/${deckId}`, {
     method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
   })
 }
 
-async function cleanupUserDecks(token: string): Promise<void> {
-  const decks = await listDecks(token)
+async function cleanupUserDecks(): Promise<void> {
+  const decks = await listDecks()
 
   for (const deck of decks) {
-    await deleteDeck(deck.id, token)
+    await deleteDeck(deck.id)
   }
 }
 
@@ -184,13 +133,7 @@ export async function cleanDatabase(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     if (error?.response?.status === 404) {
-      const userSessions = await Promise.all(TEST_USERS.map(ensureUser))
-      for (const session of userSessions) {
-        const token = getAccessToken(session)
-        if (token) {
-          await cleanupUserDecks(token)
-        }
-      }
+      await cleanupUserDecks()
       console.warn(
         '⚠ Warning: /test/clean-database endpoint not found. Falling back to deck cleanup.',
       )
@@ -206,23 +149,12 @@ export async function cleanDatabase(): Promise<void> {
  */
 export async function seedDatabase(): Promise<void> {
   try {
-    const loginResponse = await ensureUser(TEST_USERS[0])
-    await ensureUser(TEST_USERS[1])
-
-    const token = getAccessToken(loginResponse)
-    if (!token) {
-      throw new Error('Login response did not include an access token')
-    }
-
     // Cria decks
     const createdDecks: SeederDeck[] = []
     for (const deck of TEST_DECKS) {
       const response = await requestJson<SeederDeck>('/decks', {
         method: 'POST',
-        headers: {
-          ...JSON_HEADERS,
-          Authorization: `Bearer ${token}`,
-        },
+        headers: JSON_HEADERS,
         body: JSON.stringify(deck),
       })
       createdDecks.push(response)
@@ -237,10 +169,7 @@ export async function seedDatabase(): Promise<void> {
         const template = TEST_CARDS_TEMPLATES[j % TEST_CARDS_TEMPLATES.length]
         await requestJson('/cards', {
           method: 'POST',
-          headers: {
-            ...JSON_HEADERS,
-            Authorization: `Bearer ${token}`,
-          },
+          headers: JSON_HEADERS,
           body: JSON.stringify({
             deckId: deck.id,
             front: `${template.front} (${j + 1})`,

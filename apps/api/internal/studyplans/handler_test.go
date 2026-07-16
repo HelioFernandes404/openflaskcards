@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const testSecret = "test-secret-32-chars-long-secret!"
 
 type fakeStudyPlanService struct {
 	plans    map[uuid.UUID]StudyPlan
@@ -128,18 +127,17 @@ func (f *fakeStudyPlanService) SaveProgress(_ context.Context, id, userID uuid.U
 	return in, nil
 }
 
-func setupRouter(t *testing.T, svc studyPlanServicer) (*gin.Engine, *auth.JWTManager, uuid.UUID) {
+func setupRouter(t *testing.T, svc studyPlanServicer) (*gin.Engine, *fakeJWT, uuid.UUID) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	jwt := auth.NewJWTManager([]byte(testSecret), 15*time.Minute)
-	userID := uuid.New()
-	h := newHandlerWithService(svc, jwt)
+	userID := auth.DefaultUserID
+	h := newHandlerWithService(svc)
 	r := gin.New()
 	h.RegisterRoutes(r.Group("/study-plans"))
-	return r, jwt, userID
+	return r, &fakeJWT{}, userID
 }
 
-func tokenFor(t *testing.T, jwt *auth.JWTManager, userID uuid.UUID) string {
+func tokenFor(t *testing.T, jwt *fakeJWT, userID uuid.UUID) string {
 	t.Helper()
 	tok, err := jwt.Sign(userID, "u@example.com")
 	if err != nil {
@@ -148,17 +146,14 @@ func tokenFor(t *testing.T, jwt *auth.JWTManager, userID uuid.UUID) string {
 	return tok
 }
 
-func TestCreateStudyPlanRequiresAuth(t *testing.T) {
-	r, _, _ := setupRouter(t, newFakeStudyPlanService())
-	body, _ := json.Marshal(map[string]any{"title": "Plan 1"})
-	req := httptest.NewRequest(http.MethodPost, "/study-plans", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
-	}
-}
+// fakeJWT stands in for the removed *auth.JWTManager now that the
+// middleware no longer parses a bearer token (single-user mode always
+// resolves the request identity to auth.DefaultUserID). Kept only so
+// existing call sites threading a "jwt" through tokenFor/authedRequest
+// don't need touching one by one.
+type fakeJWT struct{}
+
+func (fakeJWT) Sign(uuid.UUID, string) (string, error) { return "test-token", nil }
 
 func TestCreateStudyPlanRejectsEmptyTitle(t *testing.T) {
 	svc := newFakeStudyPlanService()

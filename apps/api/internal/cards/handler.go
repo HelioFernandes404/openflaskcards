@@ -33,15 +33,14 @@ type cardsServicer interface {
 
 type Handler struct {
 	svc cardsServicer
-	jwt *auth.JWTManager
 }
 
-func NewHandler(svc *Service, jwt *auth.JWTManager) *Handler {
-	return &Handler{svc: svc, jwt: jwt}
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
 }
 
-func newHandlerWithService(svc cardsServicer, jwt *auth.JWTManager) *Handler {
-	return &Handler{svc: svc, jwt: jwt}
+func newHandlerWithService(svc cardsServicer) *Handler {
+	return &Handler{svc: svc}
 }
 
 // RegisterCardRoutes wires the card endpoints. synthesizeMiddleware (e.g. a
@@ -49,7 +48,7 @@ func newHandlerWithService(svc cardsServicer, jwt *auth.JWTManager) *Handler {
 // paid call to the TTS provider on cache miss and is otherwise unbounded per
 // user (see cogcs#37).
 func (h *Handler) RegisterCardRoutes(g *gin.RouterGroup, synthesizeMiddleware ...gin.HandlerFunc) {
-	g.Use(auth.Middleware(h.jwt))
+	g.Use(auth.Middleware())
 	g.POST("", h.create)
 	g.POST("/", h.create)
 	g.POST("/bulk", h.bulkCreate)
@@ -72,7 +71,7 @@ func (h *Handler) RegisterCardRoutes(g *gin.RouterGroup, synthesizeMiddleware ..
 }
 
 func (h *Handler) RegisterDeckCardRoutes(g *gin.RouterGroup) {
-	g.Use(auth.Middleware(h.jwt))
+	g.Use(auth.Middleware())
 	g.GET("/:id/cards", h.listByDeck)
 	g.GET("/:id/cards/count", h.countByDeck)
 }

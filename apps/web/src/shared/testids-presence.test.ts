@@ -21,25 +21,6 @@ function expectTestIds(relativePath: string, testIds: string[]) {
 }
 
 describe('data-testid presence for main Playwright flows', () => {
-  it('covers auth pages', () => {
-    expectTestIds('src/features/auth/pages/LoginPage.tsx', [
-      'login-page',
-      'login-form',
-      'login-email-input',
-      'login-password-input',
-      'login-submit-button',
-    ])
-
-    expectTestIds('src/features/auth/pages/RegisterPage.tsx', [
-      'register-page',
-      'register-form',
-      'register-nickname-input',
-      'register-email-input',
-      'register-password-input',
-      'register-submit-button',
-    ])
-  })
-
   it('covers dashboard and deck flows', () => {
     expectTestIds('src/features/dashboard/pages/Dashboard.tsx', [
       'dashboard-page',
@@ -118,7 +99,6 @@ describe('data-testid presence for main Playwright flows', () => {
     expectTestIds('src/features/profile/pages/ProfilePage.tsx', [
       'profile-page',
       'profile-timezone-select',
-      'profile-logout-button',
     ])
   })
 

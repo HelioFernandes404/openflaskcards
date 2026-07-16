@@ -24,19 +24,18 @@ type decksServicer interface {
 
 type Handler struct {
 	svc decksServicer
-	jwt *auth.JWTManager
 }
 
-func NewHandler(svc *Service, jwt *auth.JWTManager) *Handler {
-	return &Handler{svc: svc, jwt: jwt}
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
 }
 
-func newHandlerWithService(svc decksServicer, jwt *auth.JWTManager) *Handler {
-	return &Handler{svc: svc, jwt: jwt}
+func newHandlerWithService(svc decksServicer) *Handler {
+	return &Handler{svc: svc}
 }
 
 func (h *Handler) RegisterRoutes(g *gin.RouterGroup) {
-	g.Use(auth.Middleware(h.jwt))
+	g.Use(auth.Middleware())
 	g.GET("/stats", h.stats)
 	g.POST("", h.create)
 	g.POST("/", h.create)

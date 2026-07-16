@@ -36,7 +36,7 @@
 ```bash
 git clone https://github.com/HelioFernandes404/openflashcards.git
 cd openflashcards
-cp .env.example .env   # set JWT_SECRET and POSTGRES_PASSWORD
+cp .env.example .env   # set POSTGRES_PASSWORD
 docker compose up -d
 ```
 
@@ -78,18 +78,18 @@ apps/web   React 19, Vite, TanStack Query, Biome
 
 ## Environment Variables
 
-All configuration lives in `.env` — see [.env.example](.env.example) for the full annotated list (database, JWT, CORS, Redis, TTS providers).
+All configuration lives in `.env` — see [.env.example](.env.example) for the full annotated list (database, CORS, Redis, TTS providers).
 
 ## Deployment
 
-Docker Compose behind any reverse proxy with TLS. For production: set `ENVIRONMENT=production`, `LOG_LEVEL=info`, a strong random `JWT_SECRET`, and `CORS_ALLOWED_ORIGINS` to your domain.
+Docker Compose behind any reverse proxy with TLS. For production: set `ENVIRONMENT=production`, `LOG_LEVEL=info`, and `CORS_ALLOWED_ORIGINS` to your domain.
 
 ### Run from prebuilt images
 
 Skip building locally — pull the images published to GHCR on every tagged release:
 
 ```bash
-cp .env.example .env   # set JWT_SECRET and POSTGRES_PASSWORD
+cp .env.example .env   # set POSTGRES_PASSWORD
 docker compose -f docker-compose.ghcr.yaml up -d
 ```
 

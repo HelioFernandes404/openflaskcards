@@ -1,7 +1,6 @@
 package cards
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,18 +9,6 @@ import (
 
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/apperror"
 )
-
-func TestSynthesizeTextRequiresAuth(t *testing.T) {
-	r, _, _ := setupCardsRouter(t, newFakeCardsService())
-	body, _ := json.Marshal(map[string]any{"text": "hello"})
-	req := httptest.NewRequest(http.MethodPost, "/cards/audio", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
-	}
-}
 
 func TestSynthesizeTextRejectsMissingText(t *testing.T) {
 	svc := newFakeCardsService()

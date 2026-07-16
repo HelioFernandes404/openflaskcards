@@ -7,33 +7,28 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/HelioFernandes404/openflashcards/apps/api/internal/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-const testSecret = "test-secret-32-chars-long-secret!"
-
-func setupRouter(t *testing.T) (*gin.Engine, *auth.JWTManager, *fakeRepo) {
+func setupRouter(t *testing.T) (*gin.Engine, *fakeJWT, *fakeRepo) {
 	t.Helper()
 	return setupRouterWithMax(t, 10*1024*1024)
 }
 
-func setupRouterWithMax(t *testing.T, maxBytes int64) (*gin.Engine, *auth.JWTManager, *fakeRepo) {
+func setupRouterWithMax(t *testing.T, maxBytes int64) (*gin.Engine, *fakeJWT, *fakeRepo) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	repo := newFakeRepo()
 	svc := NewService(repo, t.TempDir(), maxBytes)
-	jwt := auth.NewJWTManager([]byte(testSecret), 15*time.Minute)
-	h := NewHandler(svc, jwt)
+	h := NewHandler(svc)
 	r := gin.New()
 	h.RegisterRoutes(r.Group("/media"))
-	return r, jwt, repo
+	return r, &fakeJWT{}, repo
 }
 
-func tokenFor(t *testing.T, jwt *auth.JWTManager, userID uuid.UUID) string {
+func tokenFor(t *testing.T, jwt *fakeJWT, userID uuid.UUID) string {
 	t.Helper()
 	tok, err := jwt.Sign(userID, "u@example.com")
 	if err != nil {
@@ -41,6 +36,15 @@ func tokenFor(t *testing.T, jwt *auth.JWTManager, userID uuid.UUID) string {
 	}
 	return tok
 }
+
+// fakeJWT stands in for the removed *auth.JWTManager now that the
+// middleware no longer parses a bearer token — every request in this
+// single-user deployment resolves to auth.DefaultUserID regardless of the
+// token's contents. Kept only so call sites threading a "jwt" through
+// tokenFor/authedRequest don't need touching one by one.
+type fakeJWT struct{}
+
+func (fakeJWT) Sign(uuid.UUID, string) (string, error) { return "test-token", nil }
 
 func multipartImage(t *testing.T, field, filename string, data []byte) (*bytes.Buffer, string) {
 	t.Helper()
@@ -55,18 +59,6 @@ func multipartImage(t *testing.T, field, filename string, data []byte) (*bytes.B
 	}
 	_ = w.Close()
 	return buf, w.FormDataContentType()
-}
-
-func TestUploadRequiresAuth(t *testing.T) {
-	r, _, _ := setupRouter(t)
-	body, ct := multipartImage(t, "file", "a.png", pngBytes())
-	req := httptest.NewRequest(http.MethodPost, "/media/images", body)
-	req.Header.Set("Content-Type", ct)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
-	}
 }
 
 func TestUploadRequiresFileField(t *testing.T) {
@@ -144,7 +136,7 @@ func TestUploadOverLimitReturns413(t *testing.T) {
 	}
 }
 
-func uploadOne(t *testing.T, r *gin.Engine, jwt *auth.JWTManager, userID uuid.UUID) mediaResp {
+func uploadOne(t *testing.T, r *gin.Engine, jwt *fakeJWT, userID uuid.UUID) mediaResp {
 	t.Helper()
 	body, ct := multipartImage(t, "file", "a.png", pngBytes())
 	req := httptest.NewRequest(http.MethodPost, "/media/images", body)
@@ -179,23 +171,6 @@ func TestGetWritesRawBytesAndContentType(t *testing.T) {
 	}
 	if !bytes.Equal(rec.Body.Bytes(), pngBytes()) {
 		t.Error("body bytes do not match uploaded image")
-	}
-}
-
-func TestGetOtherUserReturns404(t *testing.T) {
-	r, jwt, _ := setupRouter(t)
-	m := uploadOne(t, r, jwt, uuid.New())
-	req := httptest.NewRequest(http.MethodGet, "/media/"+m.ID, nil)
-	req.Header.Set("Authorization", "Bearer "+tokenFor(t, jwt, uuid.New()))
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", rec.Code)
-	}
-	var resp map[string]string
-	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	if resp["code"] != "MEDIA_NOT_FOUND" {
-		t.Errorf("code = %q, want MEDIA_NOT_FOUND", resp["code"])
 	}
 }
 

@@ -1,8 +1,7 @@
-import { Mail, Shield, Calendar, LogOut, Globe } from 'lucide-react'
+import { Mail, Shield, Calendar, Globe } from 'lucide-react'
 import { PageHeader } from '@/shared/layout/PageHeader'
 import { Avatar, AvatarFallback } from '@/shared/components/avatar'
 import { useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { Button } from '@/shared/components/button'
 import { Card } from '@/shared/components/card'
@@ -29,8 +28,7 @@ const COMMON_TIMEZONES = [
 ]
 
 export function ProfilePage() {
-  const { user, logout, refreshUser } = useAuth()
-  const navigate = useNavigate()
+  const { user, refreshUser } = useAuth()
   const { showToast } = useNotification()
   const [savingTimezone, setSavingTimezone] = useState(false)
 
@@ -57,11 +55,6 @@ export function ProfilePage() {
     } finally {
       setSavingTimezone(false)
     }
-  }
-
-  const handleLogout = async () => {
-    await logout()
-    navigate({ to: '/login' })
   }
 
   const formatDate = (dateStr?: string) => {
@@ -189,23 +182,6 @@ export function ProfilePage() {
               >
                 Edit Profile
               </Button>
-              <Button
-                variant="neutral"
-                className="w-full justify-start gap-2 font-bold"
-              >
-                Change Password
-              </Button>
-              <div className="pt-2">
-                <Button
-                  variant="danger"
-                  onClick={handleLogout}
-                  data-testid="profile-logout-button"
-                  className="w-full justify-start font-semibold"
-                >
-                  <LogOut size={18} />
-                  Log Out
-                </Button>
-              </div>
             </div>
           </Card>
 

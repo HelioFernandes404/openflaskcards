@@ -15,11 +15,6 @@ type Config struct {
 	// Database
 	DatabaseURL string `envconfig:"DATABASE_URL" required:"true"`
 
-	// JWT
-	JWTSecret             string `envconfig:"JWT_SECRET" required:"true"`
-	AccessTokenTTLMinutes int    `envconfig:"ACCESS_TOKEN_EXPIRE_MINUTES" default:"60"`
-	RefreshTokenTTLDays   int    `envconfig:"REFRESH_TOKEN_EXPIRE_DAYS" default:"30"`
-
 	// Redis (TTS cache)
 	RedisHost          string `envconfig:"REDIS_TTS_HOST" default:"localhost"`
 	RedisPort          int    `envconfig:"REDIS_TTS_PORT" default:"6379"`
@@ -73,32 +68,12 @@ type Config struct {
 
 	// FSRS optimizer sidecar (fsrs-rs)
 	FSRSOptimizerBin string `envconfig:"FSRS_OPTIMIZER_BIN" default:"/app/openflaskcards-fsrs-optimize"`
-
-	// SMTP (password reset emails). Host empty means "not configured": the
-	// mailer falls back to logging instead of sending.
-	SMTPHost     string `envconfig:"SMTP_HOST" default:""`
-	SMTPPort     int    `envconfig:"SMTP_PORT" default:"587"`
-	SMTPUsername string `envconfig:"SMTP_USERNAME" default:""`
-	SMTPPassword string `envconfig:"SMTP_PASSWORD" default:""`
-	SMTPFrom     string `envconfig:"SMTP_FROM" default:""`
-
-	// WebBaseURL is used to build the password reset link sent by email.
-	WebBaseURL string `envconfig:"WEB_BASE_URL" default:"http://localhost:5173"`
-
-	// PasswordResetTTLMinutes bounds how long a password reset token stays valid.
-	PasswordResetTTLMinutes int `envconfig:"PASSWORD_RESET_TTL_MINUTES" default:"30"`
 }
 
 func Load() (*Config, error) {
 	var cfg Config
 	if err := envconfig.Process("", &cfg); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
-	}
-	if len(cfg.JWTSecret) < 32 {
-		return nil, fmt.Errorf("config: JWT_SECRET must be at least 32 characters")
-	}
-	if cfg.JWTSecret == "your_jwt_secret_min_32_chars_here_make_it_random" {
-		return nil, fmt.Errorf("config: JWT_SECRET must not be the placeholder value; generate a random secret with: openssl rand -base64 48")
 	}
 	return &cfg, nil
 }

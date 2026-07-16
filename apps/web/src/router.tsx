@@ -6,7 +6,6 @@ import {
   lazyRouteComponent,
   redirect,
 } from '@tanstack/react-router'
-import { ProtectedRoute } from '@/features/auth/components/ProtectedRoute'
 import { BrowseCards } from '@/features/cards/pages/BrowseCards'
 import { AppShell } from '@/shared/layout/AppShell'
 
@@ -26,57 +25,8 @@ const rootRoute = createRootRoute({
   ),
 })
 
-const loginRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/login',
-  component: lazyRouteComponent(
-    () => import('@/features/auth/pages/LoginPage'),
-    'LoginPage',
-  ),
-})
-
-const registerRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/register',
-  component: lazyRouteComponent(
-    () => import('@/features/auth/pages/RegisterPage'),
-    'RegisterPage',
-  ),
-})
-
-const forgotPasswordRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/forgot-password',
-  component: lazyRouteComponent(
-    () => import('@/features/auth/pages/ForgotPasswordPage'),
-    'ForgotPasswordPage',
-  ),
-})
-
-interface ResetPasswordSearch {
-  token?: string
-}
-
-const resetPasswordRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/reset-password',
-  validateSearch: (search: Record<string, unknown>): ResetPasswordSearch => ({
-    token: typeof search.token === 'string' ? search.token : undefined,
-  }),
-  component: lazyRouteComponent(
-    () => import('@/features/auth/pages/ResetPasswordPage'),
-    'ResetPasswordPage',
-  ),
-})
-
-const protectedRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  id: 'protected',
-  component: ProtectedRoute,
-})
-
 const shellRoute = createRoute({
-  getParentRoute: () => protectedRoute,
+  getParentRoute: () => rootRoute,
   id: 'shell',
   component: AppShell,
 })
@@ -288,7 +238,7 @@ const helpPromptRoute = createRoute({
 })
 
 const studySessionRoute = createRoute({
-  getParentRoute: () => protectedRoute,
+  getParentRoute: () => rootRoute,
   path: '/decks/$deckId/study',
   component: lazyRouteComponent(
     () => import('@/features/study/pages/StudySession'),
@@ -305,37 +255,31 @@ const catchAllRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  loginRoute,
-  registerRoute,
-  forgotPasswordRoute,
-  resetPasswordRoute,
-  protectedRoute.addChildren([
-    shellRoute.addChildren([
-      dashboardRoute,
-      profileRoute,
-      createDeckRoute,
-      notesListRoute,
-      noteCreateRoute,
-      noteViewRoute,
-      noteEditRoute,
-      studyPlansListRoute,
-      studyPlanCreateRoute,
-      studyPlanViewRoute,
-      studyPlanEditRoute,
-      lettersListRoute,
-      letterCreateRoute,
-      letterViewRoute,
-      letterEditRoute,
-      kanbanRoute,
-      kanbanHelpRoute,
-      addCardsRoute,
-      importExportRoute,
-      algorithmSettingsRoute,
-      browseCardsRoute,
-      helpPromptRoute,
-    ]),
-    studySessionRoute,
+  shellRoute.addChildren([
+    dashboardRoute,
+    profileRoute,
+    createDeckRoute,
+    notesListRoute,
+    noteCreateRoute,
+    noteViewRoute,
+    noteEditRoute,
+    studyPlansListRoute,
+    studyPlanCreateRoute,
+    studyPlanViewRoute,
+    studyPlanEditRoute,
+    lettersListRoute,
+    letterCreateRoute,
+    letterViewRoute,
+    letterEditRoute,
+    kanbanRoute,
+    kanbanHelpRoute,
+    addCardsRoute,
+    importExportRoute,
+    algorithmSettingsRoute,
+    browseCardsRoute,
+    helpPromptRoute,
   ]),
+  studySessionRoute,
   catchAllRoute,
 ])
 

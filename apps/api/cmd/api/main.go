@@ -26,7 +26,6 @@ import (
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/fsrs"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/fsrs/optimize"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/logger"
-	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/mailer"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/middleware"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/shared/tts"
 	"github.com/HelioFernandes404/openflashcards/apps/api/internal/studyplans"
@@ -113,25 +112,15 @@ func run() error {
 		return err
 	}
 
-	jwtMgr := auth.NewJWTManager([]byte(cfg.JWTSecret), time.Duration(cfg.AccessTokenTTLMinutes)*time.Minute)
 	scheduler := fsrs.New()
 
-	mailSender := mailer.NewSender(mailer.Config{
-		Host:     cfg.SMTPHost,
-		Port:     cfg.SMTPPort,
-		Username: cfg.SMTPUsername,
-		Password: cfg.SMTPPassword,
-		From:     cfg.SMTPFrom,
-	}, log)
-
-	authRepo := auth.NewRepository(pool)
-	authSvc := auth.NewService(authRepo, jwtMgr, cfg.RefreshTokenTTLDays,
-		auth.WithPasswordReset(mailSender, cfg.WebBaseURL, time.Duration(cfg.PasswordResetTTLMinutes)*time.Minute),
-	)
 	usersSvc := users.NewService(pool, users.WithOptimizerRunner(optimize.Runner{
 		Binary:  cfg.FSRSOptimizerBin,
 		Timeout: 120 * time.Second,
 	}))
+	if err := usersSvc.EnsureDefaultUser(ctx, auth.DefaultUserID); err != nil {
+		return fmt.Errorf("ensure default user: %w", err)
+	}
 	if err := usersSvc.ReconcileStaleOptimizations(ctx); err != nil {
 		log.Warn("failed to reconcile stale FSRS optimizations on startup", zap.Error(err))
 	}
@@ -145,20 +134,16 @@ func run() error {
 	mediaSvc := media.NewService(media.NewRepository(pool), cfg.MediaDir, cfg.MediaMaxImageBytes)
 	cardsSvc := cards.NewService(pool, scheduler, ttsSvc, cards.WithLogger(log), cards.WithMediaOwnerChecker(mediaSvc))
 
-	// Cookie Secure is disabled only in local development (plain HTTP);
-	// production must always send Secure so the refresh cookie is never
-	// transmitted unencrypted.
-	authH := auth.NewHandlerWithConfig(authSvc, cfg.RefreshTokenTTLDays, cfg.Env != "development")
-	usersH := users.NewHandler(usersSvc, authSvc, jwtMgr)
-	decksH := decks.NewHandler(decksSvc, jwtMgr)
-	modulesH := modules.NewHandler(modulesSvc, jwtMgr)
-	notesH := notes.NewHandler(notesSvc, jwtMgr)
-	promptTemplatesH := prompttemplates.NewHandler(promptTemplatesSvc, jwtMgr)
-	lettersH := letters.NewHandler(lettersSvc, jwtMgr)
-	studyPlansH := studyplans.NewHandler(studyPlansSvc, jwtMgr)
-	kanbanH := kanban.NewHandler(kanbanSvc, jwtMgr)
-	cardsH := cards.NewHandler(cardsSvc, jwtMgr)
-	mediaH := media.NewHandler(mediaSvc, jwtMgr)
+	usersH := users.NewHandler(usersSvc)
+	decksH := decks.NewHandler(decksSvc)
+	modulesH := modules.NewHandler(modulesSvc)
+	notesH := notes.NewHandler(notesSvc)
+	promptTemplatesH := prompttemplates.NewHandler(promptTemplatesSvc)
+	lettersH := letters.NewHandler(lettersSvc)
+	studyPlansH := studyplans.NewHandler(studyPlansSvc)
+	kanbanH := kanban.NewHandler(kanbanSvc)
+	cardsH := cards.NewHandler(cardsSvc)
+	mediaH := media.NewHandler(mediaSvc)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -187,16 +172,14 @@ func run() error {
 		TTS:   ttsSvc,
 	}))
 
-	authRateLimiter := cache.NewRedisRateLimiter(redis)
-	authRateLimit := middleware.RateLimit(authRateLimiter, 20, time.Minute, middleware.ByClientIP)
+	rateLimiter := cache.NewRedisRateLimiter(redis)
 	// TTS synthesis hits a paid provider on cache miss and the cache key is
 	// trivially bypassed by any whitespace/punctuation change in the input
-	// text, so it needs its own per-user quota independent of /auth's IP
-	// based limiter (see openflashcards issue for cogcs#37).
-	ttsSynthesizeRateLimit := middleware.RateLimit(authRateLimiter, 30, time.Hour, middleware.ByUserID)
+	// text, so it needs its own per-user quota (see openflashcards issue for
+	// cogcs#37).
+	ttsSynthesizeRateLimit := middleware.RateLimit(rateLimiter, 30, time.Hour, middleware.ByUserID)
 
 	api := r.Group("/api/v1")
-	authH.RegisterRoutes(api.Group("/auth"), authRateLimit)
 	usersH.RegisterRoutes(api.Group("/users"))
 	decksH.RegisterRoutes(api.Group("/decks"))
 	modulesH.RegisterRoutes(api.Group("/modules"))
